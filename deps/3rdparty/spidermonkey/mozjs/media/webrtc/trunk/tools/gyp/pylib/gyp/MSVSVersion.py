@@ -52,7 +52,7 @@ class VisualStudioVersion(object):
 
   def ProjectExtension(self):
     """Returns the file extension for the project."""
-    return self.uses_vcxproj and '.vcxproj' or '.vcproj'
+    return '.vcxproj' if self.uses_vcxproj else '.vcproj'
 
   def Path(self):
     """Returns the path to Visual Studio installation."""
@@ -76,24 +76,19 @@ class VisualStudioVersion(object):
     assert target_arch in ('x86', 'x64')
     sdk_dir = os.environ.get('WindowsSDKDir')
     if self.sdk_based and sdk_dir:
-      return [os.path.normpath(os.path.join(sdk_dir, 'Bin/SetEnv.Cmd')),
-              '/' + target_arch]
-    else:
-      # We don't use VC/vcvarsall.bat for x86 because vcvarsall calls
-      # vcvars32, which it can only find if VS??COMNTOOLS is set, which it
-      # isn't always.
-      if target_arch == 'x86':
-        return [os.path.normpath(
-          os.path.join(self.path, 'Common7/Tools/vsvars32.bat'))]
-      else:
-        assert target_arch == 'x64'
-        arg = 'x86_amd64'
-        if (os.environ.get('PROCESSOR_ARCHITECTURE') == 'AMD64' or
-            os.environ.get('PROCESSOR_ARCHITEW6432') == 'AMD64'):
-          # Use the 64-on-64 compiler if we can.
-          arg = 'amd64'
-        return [os.path.normpath(
-            os.path.join(self.path, 'VC/vcvarsall.bat')), arg]
+      return [
+          os.path.normpath(os.path.join(sdk_dir, 'Bin/SetEnv.Cmd')),
+          f'/{target_arch}',
+      ]
+    if target_arch == 'x86':
+      return [os.path.normpath(
+        os.path.join(self.path, 'Common7/Tools/vsvars32.bat'))]
+    assert target_arch == 'x64'
+    arg = ('amd64' if (os.environ.get('PROCESSOR_ARCHITECTURE') == 'AMD64'
+                       or os.environ.get('PROCESSOR_ARCHITEW6432') == 'AMD64')
+           else 'x86_amd64')
+    return [os.path.normpath(
+        os.path.join(self.path, 'VC/vcvarsall.bat')), arg]
 
 
 def _RegistryQueryBase(sysdir, key, value):
@@ -122,9 +117,7 @@ def _RegistryQueryBase(sysdir, key, value):
   # Note that the error text may be in [1] in some cases
   text = p.communicate()[0]
   # Check return code from reg.exe; officially 0==success and 1==error
-  if p.returncode:
-    return None
-  return text
+  return None if p.returncode else text
 
 
 def _RegistryQuery(key, value=None):
@@ -169,9 +162,7 @@ def _RegistryGetValue(key, value):
     return None
   # Extract value.
   match = re.search(r'REG_\w+\s+([^\r]+)\r\n', text)
-  if not match:
-    return None
-  return match.group(1)
+  return None if not match else match[1]
 
 
 def _RegistryKeyExists(key):
@@ -182,9 +173,7 @@ def _RegistryKeyExists(key):
   Return:
     True if the key exists
   """
-  if not _RegistryQuery(key):
-    return False
-  return True
+  return bool(_RegistryQuery(key))
 
 
 def _CreateVersion(name, path, sdk_based=False):
@@ -301,8 +290,8 @@ def _DetectVisualStudioVersions(versions_to_check, force_express):
             r'HKLM\Software\Wow6432Node\Microsoft\VisualStudio\%s' % version,
             r'HKLM\Software\Microsoft\VCExpress\%s' % version,
             r'HKLM\Software\Wow6432Node\Microsoft\VCExpress\%s' % version]
-    for index in range(len(keys)):
-      path = _RegistryGetValue(keys[index], 'InstallDir')
+    for key in keys:
+      path = _RegistryGetValue(key, 'InstallDir')
       if not path:
         continue
       path = _ConvertToCygpath(path)
@@ -313,22 +302,26 @@ def _DetectVisualStudioVersions(versions_to_check, force_express):
         # Add this one.
         versions.append(_CreateVersion(version_to_year[version],
             os.path.join(path, '..', '..')))
-      # Check for express.
       elif os.path.exists(express_path):
         # Add this one.
-        versions.append(_CreateVersion(version_to_year[version] + 'e',
-            os.path.join(path, '..', '..')))
+        versions.append(
+            _CreateVersion(f'{version_to_year[version]}e',
+                           os.path.join(path, '..', '..')))
 
     # The old method above does not work when only SDK is installed.
     keys = [r'HKLM\Software\Microsoft\VisualStudio\SxS\VC7',
             r'HKLM\Software\Wow6432Node\Microsoft\VisualStudio\SxS\VC7']
-    for index in range(len(keys)):
-      path = _RegistryGetValue(keys[index], version)
+    for key_ in keys:
+      path = _RegistryGetValue(key_, version)
       if not path:
         continue
       path = _ConvertToCygpath(path)
-      versions.append(_CreateVersion(version_to_year[version] + 'e',
-          os.path.join(path, '..'), sdk_based=True))
+      versions.append(
+          _CreateVersion(
+              f'{version_to_year[version]}e',
+              os.path.join(path, '..'),
+              sdk_based=True,
+          ))
 
   return versions
 
@@ -356,11 +349,9 @@ def SelectVisualStudioVersion(version='auto'):
     '2012e': ('11.0',),
   }
   version = str(version)
-  versions = _DetectVisualStudioVersions(version_map[version], 'e' in version)
-  if not versions:
-    if version == 'auto':
-      # Default to 2005 if we couldn't find anything
-      return _CreateVersion('2005', None)
-    else:
-      return _CreateVersion(version, None)
-  return versions[0]
+  if versions := _DetectVisualStudioVersions(version_map[version], 'e'
+                                             in version):
+    return versions[0]
+  else:
+    return (_CreateVersion('2005', None)
+            if version == 'auto' else _CreateVersion(version, None))

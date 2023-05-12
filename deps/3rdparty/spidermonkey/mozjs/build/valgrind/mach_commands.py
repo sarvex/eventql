@@ -66,7 +66,7 @@ class MachCommands(MachCommandBase):
             #TODO: refactor this into mozprofile
             prefpath = os.path.join(self.topsrcdir, 'testing', 'profiles', 'prefs_general.js')
             prefs = {}
-            prefs.update(Preferences.read_prefs(prefpath))
+            prefs |= Preferences.read_prefs(prefpath)
             interpolation = { 'server': '%s:%d' % httpd.httpd.server_address,
                               'OOP': 'false'}
             prefs = json.loads(json.dumps(prefs) % interpolation)
@@ -112,19 +112,17 @@ class MachCommands(MachCommandBase):
                 '--trace-children=yes',
             ]
 
-            for s in suppressions:
-                valgrind_args.append('--suppressions=' + s)
-
+            valgrind_args.extend(f'--suppressions={s}' for s in suppressions)
             supps_dir = os.path.join(build_dir, 'valgrind')
             supps_file1 = os.path.join(supps_dir, 'cross-architecture.sup')
-            valgrind_args.append('--suppressions=' + supps_file1)
+            valgrind_args.append(f'--suppressions={supps_file1}')
 
             # MACHTYPE is an odd bash-only environment variable that doesn't
             # show up in os.environ, so we have to get it another way.
             machtype = subprocess.check_output(['bash', '-c', 'echo $MACHTYPE']).rstrip()
-            supps_file2 = os.path.join(supps_dir, machtype + '.sup')
+            supps_file2 = os.path.join(supps_dir, f'{machtype}.sup')
             if os.path.isfile(supps_file2):
-                valgrind_args.append('--suppressions=' + supps_file2)
+                valgrind_args.append(f'--suppressions={supps_file2}')
 
             exitcode = None
             timeout = 1100
@@ -145,7 +143,9 @@ class MachCommands(MachCommandBase):
                 supps = outputHandler.suppression_count
                 if errs != supps:
                     status = 1  # turns the TBPL job orange
-                    print('TEST-UNEXPECTED-FAIL | valgrind-test | error parsing: {} errors seen, but {} generated suppressions seen'.format(errs, supps))
+                    print(
+                        f'TEST-UNEXPECTED-FAIL | valgrind-test | error parsing: {errs} errors seen, but {supps} generated suppressions seen'
+                    )
 
                 elif errs == 0:
                     status = 0
@@ -154,9 +154,11 @@ class MachCommands(MachCommandBase):
                     status = 1  # turns the TBPL job orange
                     # We've already printed details of the errors.
 
-                if exitcode == None:
+                if exitcode is None:
                     status = 2  # turns the TBPL job red
-                    print('TEST-UNEXPECTED-FAIL | valgrind-test | Valgrind timed out (reached {} second limit)'.format(timeout))
+                    print(
+                        f'TEST-UNEXPECTED-FAIL | valgrind-test | Valgrind timed out (reached {timeout} second limit)'
+                    )
                 elif exitcode != 0:
                     status = 2  # turns the TBPL job red
                     print('TEST-UNEXPECTED-FAIL | valgrind-test | non-zero exit code from Valgrind')

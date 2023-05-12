@@ -2,15 +2,12 @@
 A representation of makefile data structures.
 """
 
+
 import logging, re, os, sys
 import parserdata, parser, functions, process, util, implicit
 from cStringIO import StringIO
 
-if sys.version_info[0] < 3:
-    str_type = basestring
-else:
-    str_type = str
-
+str_type = basestring if sys.version_info[0] < 3 else str
 _log = logging.getLogger('pymake.data')
 
 class DataError(util.MakeError):
@@ -27,7 +24,7 @@ class ResolutionError(DataError):
 def withoutdups(it):
     r = set()
     for i in it:
-        if not i in r:
+        if i not in r:
             r.add(i)
             yield i
 
@@ -64,9 +61,7 @@ def getindent(stack):
     return ''.ljust(len(stack) - 1)
 
 def _if_else(c, t, f):
-    if c:
-        return t()
-    return f()
+    return t() if c else f()
 
 
 class BaseExpansion(object):
@@ -95,8 +90,7 @@ class BaseExpansion(object):
         child expansions and extract all functions in the tree.
         """
         # An empty generator. Yeah, it's weird.
-        for x in []:
-            yield x
+        yield from []
 
     def variable_references(self, descend=False):
         """Obtain all variable references in this expansion.
@@ -120,21 +114,16 @@ class BaseExpansion(object):
         This effectively asks "is any function in this expansion dependent on
         the filesystem.
         """
-        for f in self.functions(descend=True):
-            if f.is_filesystem_dependent:
-                return True
-
-        return False
+        return any(f.is_filesystem_dependent for f in self.functions(descend=True))
 
     @property
     def is_shell_dependent(self):
         """Whether this expansion may invoke a shell for evaluation."""
 
-        for f in self.functions(descend=True):
-            if isinstance(f, functions.ShellFunction):
-                return True
-
-        return False
+        return any(
+            isinstance(f, functions.ShellFunction)
+            for f in self.functions(descend=True)
+        )
 
 
 class StringExpansion(BaseExpansion):
@@ -201,10 +190,7 @@ class StringExpansion(BaseExpansion):
         if escape_comments:
             s = s.replace('#', '\\#')
 
-        if escape_variables:
-            return s.replace('$', '$$')
-
-        return s
+        return s.replace('$', '$$') if escape_variables else s
 
 
 class Expansion(BaseExpansion, list):
@@ -288,8 +274,7 @@ class Expansion(BaseExpansion, list):
         for (e, isfunc) in self:
             if isfunc:
                 if strings:
-                    s = ''.join(strings)
-                    if s:
+                    if s := ''.join(strings):
                         elements.append((s, False))
                     strings = []
                 elements.append((e, True))
@@ -301,8 +286,7 @@ class Expansion(BaseExpansion, list):
             return StringExpansion(''.join(strings), self.loc)
 
         if strings:
-            s = ''.join(strings)
-            if s:
+            if s := ''.join(strings):
                 elements.append((s, False))
 
         if len(elements) < len(self):
@@ -342,11 +326,7 @@ class Expansion(BaseExpansion, list):
     def is_static_string(self):
         """An Expansion is static if all its components are strings, not
         functions."""
-        for e, is_func in self:
-            if is_func:
-                return False
-
-        return True
+        return not any(is_func for e, is_func in self)
 
     def functions(self, descend=False):
         for e, is_func in self:
@@ -355,8 +335,7 @@ class Expansion(BaseExpansion, list):
 
             if descend:
                 for exp in e.expansions(descend=True):
-                    for f in exp.functions(descend=True):
-                        yield f
+                    yield from exp.functions(descend=True)
 
     def __repr__(self):
         return "<Expansion with elements: %r>" % ([e for e, isfunc in self],)
@@ -386,22 +365,12 @@ class Expansion(BaseExpansion, list):
         a = self.clone().finish()
 
         if isinstance(other, StringExpansion):
-            if isinstance(a, StringExpansion):
-                return a == other
-
-            # A normalized Expansion != StringExpansion.
-            return False
-
+            return a == other if isinstance(a, StringExpansion) else False
         b = other.clone().finish()
 
         # b could be a StringExpansion now.
         if isinstance(b, StringExpansion):
-            if isinstance(a, StringExpansion):
-                return a == b
-
-            # Our normalized Expansion != normalized StringExpansion.
-            return False
-
+            return a == b if isinstance(a, StringExpansion) else False
         if len(a) != len(b):
             return False
 
@@ -462,7 +431,10 @@ class Variables(object):
         flavor, source, valuestr, valueexp = self._map.get(name, (None, None, None, None))
         if flavor is not None:
             if expand and flavor != self.FLAVOR_SIMPLE and valueexp is None:
-                d = parser.Data.fromstring(valuestr, parserdata.Location("Expansion of variables '%s'" % (name,), 1, 0))
+                d = parser.Data.fromstring(
+                    valuestr,
+                    parserdata.Location(f"Expansion of variables '{name}'", 1, 0),
+                )
                 valueexp, t, o = parser.parsemakesyntax(d, 0, (), parser.iterdata)
                 self._map[name] = flavor, source, valuestr, valueexp
 
@@ -481,21 +453,21 @@ class Variables(object):
                         return pflavor, psource, pvalue
 
                     if not expand:
-                        return pflavor, psource, pvalue + ' ' + valuestr
+                        return pflavor, psource, f'{pvalue} {valuestr}'
 
                     pvalue = pvalue.clone()
                     pvalue.appendstr(' ')
                     pvalue.concat(valueexp)
 
                     return pflavor, psource, pvalue
-                    
+
             if not expand:
                 return flavor, source, valuestr
 
             if flavor == self.FLAVOR_RECURSIVE:
                 val = valueexp
             else:
-                val = Expansion.fromstring(valuestr, "Expansion of variable '%s'" % (name,))
+                val = Expansion.fromstring(valuestr, f"Expansion of variable '{name}'")
 
             return flavor, source, val
 
@@ -507,12 +479,14 @@ class Variables(object):
     def set(self, name, flavor, source, value, force=False):
         assert flavor in (self.FLAVOR_RECURSIVE, self.FLAVOR_SIMPLE)
         assert source in (self.SOURCE_OVERRIDE, self.SOURCE_COMMANDLINE, self.SOURCE_MAKEFILE, self.SOURCE_ENVIRONMENT, self.SOURCE_AUTOMATIC, self.SOURCE_IMPLICIT)
-        assert isinstance(value, str_type), "expected str, got %s" % type(value)
+        assert isinstance(value, str_type), f"expected str, got {type(value)}"
 
         prevflavor, prevsource, prevvalue = self.get(name)
         if prevsource is not None and source > prevsource and not force:
             # TODO: give a location for this warning
-            _log.info("not setting variable '%s', set by higher-priority source to value '%s'" % (name, prevvalue))
+            _log.info(
+                f"not setting variable '{name}', set by higher-priority source to value '{prevvalue}'"
+            )
             return
 
         self._map[name] = flavor, source, value, None
@@ -531,14 +505,17 @@ class Variables(object):
             return
 
         if prevflavor == self.FLAVOR_SIMPLE:
-            d = parser.Data.fromstring(value, parserdata.Location("Expansion of variables '%s'" % (name,), 1, 0))
+            d = parser.Data.fromstring(
+                value,
+                parserdata.Location(f"Expansion of variables '{name}'", 1, 0),
+            )
             valueexp, t, o = parser.parsemakesyntax(d, 0, (), parser.iterdata)
 
             val = valueexp.resolvestr(makefile, variables, [name])
-            self._map[name] = prevflavor, prevsource, prevvalue + ' ' + val, None
+            self._map[name] = prevflavor, prevsource, f'{prevvalue} {val}', None
             return
 
-        newvalue = prevvalue + ' ' + value
+        newvalue = f'{prevvalue} {value}'
         self._map[name] = prevflavor, prevsource, newvalue, None
 
     def merge(self, other):
@@ -626,18 +603,12 @@ class Pattern(object):
         """
         d = self.data
         if len(d) == 1:
-            if word == d[0]:
-                return word
-            return None
-
+            return word if word == d[0] else None
         d0, d1 = d
         l1 = len(d0)
         l2 = len(d1)
         if len(word) >= l1 + l2 and word.startswith(d0) and word.endswith(d1):
-            if l2 == 0:
-                return word[l1:]
-            return word[l1:-l2]
-
+            return word[l1:] if l2 == 0 else word[l1:-l2]
         return None
 
     def resolve(self, dir, stem):
@@ -658,7 +629,7 @@ class Pattern(object):
         stem = self.match(word)
         if stem is None:
             if mustmatch:
-                raise DataError("target '%s' doesn't match pattern" % (word,))
+                raise DataError(f"target '{word}' doesn't match pattern")
             return word
 
         if not self.ispattern():
@@ -988,13 +959,19 @@ class Target(object):
     def addrule(self, rule):
         assert isinstance(rule, (Rule, PatternRuleInstance))
         if len(self.rules) and rule.doublecolon != self.rules[0].doublecolon:
-            raise DataError("Cannot have single- and double-colon rules for the same target. Prior rule location: %s" % self.rules[0].loc, rule.loc)
+            raise DataError(
+                f"Cannot have single- and double-colon rules for the same target. Prior rule location: {self.rules[0].loc}",
+                rule.loc,
+            )
 
         if isinstance(rule, PatternRuleInstance):
             if len(rule.prule.targetpatterns) != 1:
                 raise DataError("Static pattern rules must only have one target pattern", rule.prule.loc)
             if rule.prule.targetpatterns[0].match(self.target) is None:
-                raise DataError("Static pattern rule doesn't match target '%s'" % self.target, rule.loc)
+                raise DataError(
+                    f"Static pattern rule doesn't match target '{self.target}'",
+                    rule.loc,
+                )
 
         self.rules.append(rule)
 
@@ -1006,11 +983,7 @@ class Target(object):
         return makefile.gettarget('.PHONY').hasdependency(self.target)
 
     def hasdependency(self, t):
-        for rule in self.rules:
-            if t in rule.prerequisites:
-                return True
-
-        return False
+        return any(t in rule.prerequisites for rule in self.rules)
 
     def resolveimplicitrule(self, makefile, targetstack, rulestack):
         """
@@ -1037,9 +1010,7 @@ class Target(object):
             if not len(r.commands):
                 continue
 
-            for ri in r.matchesfor(dir, file, hasmatch):
-                candidates.append(ri)
-            
+            candidates.extend(iter(r.matchesfor(dir, file, hasmatch)))
         newcandidates = []
 
         for r in candidates:
@@ -1109,11 +1080,12 @@ class Target(object):
         assert makefile.parsingfinished
 
         if self.target in targetstack:
-            raise ResolutionError("Recursive dependency: %s -> %s" % (
-                    " -> ".join(targetstack), self.target))
+            raise ResolutionError(
+                f'Recursive dependency: {" -> ".join(targetstack)} -> {self.target}'
+            )
 
         targetstack = targetstack + [self.target]
-        
+
         indent = getindent(targetstack)
 
         _log.info("%sConsidering target '%s'", indent, self.target)
@@ -1122,11 +1094,10 @@ class Target(object):
 
         # Sanity-check our rules. If we're single-colon, only one rule should have commands
         ruleswithcommands = self.ruleswithcommands()
-        if len(self.rules) and not self.isdoublecolon():
-            if ruleswithcommands > 1:
+        if len(self.rules) and not self.isdoublecolon() and ruleswithcommands > 1:
                 # In GNU make this is a warning, not an error. I'm going to be stricter.
                 # TODO: provide locations
-                raise DataError("Target '%s' has multiple rules with commands." % self.target)
+            raise DataError(f"Target '{self.target}' has multiple rules with commands.")
 
         if ruleswithcommands == 0:
             self.resolveimplicitrule(makefile, targetstack, rulestack)
@@ -1227,7 +1198,7 @@ class Target(object):
         self.wasremade = True
 
     def notifydone(self, makefile):
-        assert self._state == MAKESTATE_WORKING, "State was %s" % self._state
+        assert self._state == MAKESTATE_WORKING, f"State was {self._state}"
         # If we were remade then resolve mtime again
         if self.wasremade:
             targetandtime = self.searchinlocs(makefile, [self.target])
@@ -1323,10 +1294,7 @@ class Target(object):
 
 def dirpart(p):
     d, s, f = util.strrpartition(p, '/')
-    if d == '':
-        return '.'
-
-    return d
+    return '.' if d == '' else d
 
 def filepart(p):
     d, s, f = util.strrpartition(p, '/')
@@ -1334,8 +1302,18 @@ def filepart(p):
 
 def setautomatic(v, name, plist):
     v.set(name, Variables.FLAVOR_SIMPLE, Variables.SOURCE_AUTOMATIC, ' '.join(plist))
-    v.set(name + 'D', Variables.FLAVOR_SIMPLE, Variables.SOURCE_AUTOMATIC, ' '.join((dirpart(p) for p in plist)))
-    v.set(name + 'F', Variables.FLAVOR_SIMPLE, Variables.SOURCE_AUTOMATIC, ' '.join((filepart(p) for p in plist)))
+    v.set(
+        f'{name}D',
+        Variables.FLAVOR_SIMPLE,
+        Variables.SOURCE_AUTOMATIC,
+        ' '.join((dirpart(p) for p in plist)),
+    )
+    v.set(
+        f'{name}F',
+        Variables.FLAVOR_SIMPLE,
+        Variables.SOURCE_AUTOMATIC,
+        ' '.join((filepart(p) for p in plist)),
+    )
 
 def setautomaticvariables(v, makefile, target, prerequisites):
     prtargets = [makefile.gettarget(p) for p in prerequisites]
@@ -1421,9 +1399,15 @@ class _NativeWrapper(_CommandWrapper):
         # get the module and method to call
         parts, badchar = process.clinetoargv(self.cline, self.kwargs['cwd'])
         if parts is None:
-            raise DataError("native command '%s': shell metacharacter '%s' in command line" % (self.cline, badchar), self.loc)
+            raise DataError(
+                f"native command '{self.cline}': shell metacharacter '{badchar}' in command line",
+                self.loc,
+            )
         if len(parts) < 2:
-            raise DataError("native command '%s': no method name specified" % self.cline, self.loc)
+            raise DataError(
+                f"native command '{self.cline}': no method name specified",
+                self.loc,
+            )
         module = parts[0]
         method = parts[1]
         cline_list = parts[2:]
@@ -1447,7 +1431,7 @@ def getcommandsforrule(rule, target, makefile, prerequisites, stem):
             if (isHidden or makefile.silent) and not makefile.justprint:
                 echo = None
             else:
-                echo = "%s$ %s" % (c.loc, cline)
+                echo = f"{c.loc}$ {cline}"
             if not isNative:
                 yield _CommandWrapper(cline, ignoreErrors=ignoreErrors, env=env, cwd=makefile.workdir, loc=c.loc, context=makefile.context,
                                       echo=echo, justprint=makefile.justprint)
@@ -1520,10 +1504,7 @@ class PatternRuleInstance(object):
         return getcommandsforrule(self, target, makefile, self.prerequisites, stem=self.dir + self.stem)
 
     def __str__(self):
-        return "Pattern rule at %s with stem '%s', matchany: %s doublecolon: %s" % (self.loc,
-                                                                                    self.dir + self.stem,
-                                                                                    self.ismatchany,
-                                                                                    self.doublecolon)
+        return f"Pattern rule at {self.loc} with stem '{self.dir + self.stem}', matchany: {self.ismatchany} doublecolon: {self.doublecolon}"
 
 class PatternRule(object):
     """
@@ -1546,11 +1527,10 @@ class PatternRule(object):
         return util.any((t.ismatchany() for t in self.targetpatterns))
 
     def hasspecificmatch(self, file):
-        for p in self.targetpatterns:
-            if not p.ismatchany() and p.match(file) is not None:
-                return True
-
-        return False
+        return any(
+            not p.ismatchany() and p.match(file) is not None
+            for p in self.targetpatterns
+        )
 
     def matchesfor(self, dir, file, skipsinglecolonmatchany):
         """
@@ -1559,8 +1539,7 @@ class PatternRule(object):
         """
 
         for p in self.targetpatterns:
-            matchany = p.ismatchany()
-            if matchany:
+            if matchany := p.ismatchany():
                 if skipsinglecolonmatchany and not self.doublecolon:
                     continue
 
@@ -1778,10 +1757,7 @@ class Makefile(object):
         self.included.append((path, required))
         fspath = util.normaljoin(self.workdir, path)
         if os.path.exists(fspath):
-            if weak:
-                stmts = parser.parsedepfile(fspath)
-            else:
-                stmts = parser.parsefile(fspath)
+            stmts = parser.parsedepfile(fspath) if weak else parser.parsefile(fspath)
             self.variables.append('MAKEFILE_LIST', Variables.SOURCE_AUTOMATIC, path, None, self)
             stmts.execute(self, weak=weak)
             self.gettarget(path).explicit = True
@@ -1828,10 +1804,7 @@ class Makefile(object):
         for vname, v in self.exportedvars.iteritems():
             if v:
                 flavor, source, val = variables.get(vname)
-                if val is None:
-                    strval = ''
-                else:
-                    strval = val.resolvestr(self, variables, [vname])
+                strval = '' if val is None else val.resolvestr(self, variables, [vname])
                 env[vname] = strval
             else:
                 env.pop(vname, None)

@@ -25,8 +25,7 @@ details = {}
 count = 0
 for f in files:
     text = file(f).read()
-    match = re.findall(search_string, text)
-    if match:
+    if match := re.findall(search_string, text):
         num = len(match)
         count += num
         details[f] = num

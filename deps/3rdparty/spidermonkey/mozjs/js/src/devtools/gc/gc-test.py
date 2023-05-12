@@ -55,19 +55,18 @@ def run_test(test):
     out, err = out.decode(), err.decode()
 
     float_array = [float(_) for _ in err.split()]
-    
-    if len(float_array) == 0:
+
+    if not float_array:
         print('Error: No data from application. Configured with --enable-gctimer?')
         sys.exit(1)
 
     for i, currItem in enumerate(float_array):
         if (i % 3 == 0):
             total.append(currItem)
+        elif (i % 3 == 1):
+            mark.append(currItem)
         else:
-            if (i % 3 == 1):
-                mark.append(currItem)
-            else:
-                sweep.append(currItem)
+            sweep.append(currItem)
 
     return max(total), avg(total), max(mark), avg(mark), max(sweep), avg(sweep)
 
@@ -76,7 +75,7 @@ def run_tests(tests, test_dir):
 
     try:
         for i, test in enumerate(tests):
-            filename_str = '"%s"' % test.name
+            filename_str = f'"{test.name}"'
             TMax, TAvg, MMax, MAvg, SMax, SAvg = run_test(test)
             bench_map[test.name] = [TMax, TAvg, MMax, MAvg, SMax, SAvg]
             fmt = '%20s: {"TMax": %4.1f, "TAvg": %4.1f, "MMax": %4.1f, "MAvg": %4.1f, "SMax": %4.1f, "SAvg": %4.1f}'
@@ -86,8 +85,19 @@ def run_tests(tests, test_dir):
     except KeyboardInterrupt:
         print('fail')
 
-    return dict((filename, dict(TMax=TMax, TAvg=TAvg, MMax=MMax, MAvg=MAvg, SMax=SMax, SAvg=SAvg))
-            for filename, (TMax, TAvg, MMax, MAvg, SMax, SAvg) in bench_map.iteritems())
+    return {
+        filename: dict(
+            TMax=TMax, TAvg=TAvg, MMax=MMax, MAvg=MAvg, SMax=SMax, SAvg=SAvg
+        )
+        for filename, (
+            TMax,
+            TAvg,
+            MMax,
+            MAvg,
+            SMax,
+            SAvg,
+        ) in bench_map.iteritems()
+    }
 
 def compare(current, baseline):
     percent_speedups = []

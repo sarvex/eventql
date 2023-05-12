@@ -65,9 +65,7 @@ class ReftestManifest(object):
                 if line.startswith('#'):
                     continue
 
-                # Comments can begin mid line. Strip them.
-                m = RE_COMMENT.search(line)
-                if m:
+                if m := RE_COMMENT.search(line):
                     line = line[:m.start()]
 
                 line = line.strip()
@@ -87,8 +85,7 @@ class ReftestManifest(object):
                     if item == 'HTTP':
                         continue
 
-                    m = RE_HTTP.match(item)
-                    if m:
+                    if m := RE_HTTP.match(item):
                         # Need to package the referenced directory.
                         self.dirs.add(os.path.normpath(os.path.join(
                             mdir, m.group(1))))
@@ -105,11 +102,11 @@ class ReftestManifest(object):
                         self.load(os.path.join(mdir, items[i+1]))
                         break
 
-                    if item == 'load' or item == 'script':
+                    if item in ['load', 'script']:
                         tests.append(items[i+1])
                         break
 
-                    if item == '==' or item == '!=':
+                    if item in ['==', '!=']:
                         tests.extend(items[i+1:i+3])
                         break
 

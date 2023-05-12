@@ -38,23 +38,22 @@ def RequireEnvironmentVariable(v):
 def OptionalEnvironmentVariable(v):
     """Return the value of the environment variable named v, or None
     if it's unset (or empty)."""
-    if v in os.environ and os.environ[v] != "":
-        return os.environ[v]
-    return None
+    return os.environ[v] if v in os.environ and os.environ[v] != "" else None
 
 def FixupMsysPath(path):
     """MSYS helpfully translates absolute pathnames in environment variables
     and commandline arguments into Windows native paths. This sucks if you're
     trying to pass an absolute path on a remote server. This function attempts
     to un-mangle such paths."""
-    if 'OSTYPE' in os.environ and os.environ['OSTYPE'] == 'msys':
-        # sort of awful, find out where our shell is (should be in msys/bin)
-        # and strip the first part of that path out of the other path
-        if 'SHELL' in os.environ:
-            sh = os.environ['SHELL']
-            msys = sh[:sh.find('/bin')]
-            if path.startswith(msys):
-                path = path[len(msys):]
+    if (
+        'OSTYPE' in os.environ
+        and os.environ['OSTYPE'] == 'msys'
+        and 'SHELL' in os.environ
+    ):
+        sh = os.environ['SHELL']
+        msys = sh[:sh.find('/bin')]
+        if path.startswith(msys):
+            path = path[len(msys):]
     return path
 
 def WindowsPathToMsysPath(path):
@@ -64,7 +63,7 @@ def WindowsPathToMsysPath(path):
     if sys.platform != 'win32':
         return path
     (drive, path) = os.path.splitdrive(os.path.abspath(path))
-    return "/" + drive[0] + path.replace('\\','/')
+    return f"/{drive[0]}" + path.replace('\\','/')
 
 def AppendOptionalArgsToSSHCommandline(cmdline, port, ssh_key):
     """Given optional port and ssh key values, append valid OpenSSH
@@ -75,33 +74,30 @@ def AppendOptionalArgsToSSHCommandline(cmdline, port, ssh_key):
         # Don't interpret ~ paths - ssh can handle that on its own
         if not ssh_key.startswith('~'):
             ssh_key = WindowsPathToMsysPath(ssh_key)
-        cmdline.extend(["-o", "IdentityFile=%s" % ssh_key])
+        cmdline.extend(["-o", f"IdentityFile={ssh_key}"])
 
 def DoSSHCommand(command, user, host, port=None, ssh_key=None):
     """Execute command on user@host using ssh. Optionally use
     port and ssh_key, if provided."""
     cmdline = ["ssh"]
     AppendOptionalArgsToSSHCommandline(cmdline, port, ssh_key)
-    cmdline.extend(["%s@%s" % (user, host), command])
+    cmdline.extend([f"{user}@{host}", command])
 
     with redo.retrying(check_output, sleeptime=10) as f:
-        output = f(cmdline).strip()
-        return output
-
-    raise Exception("Command %s returned non-zero exit code" % cmdline)
+        return f(cmdline).strip()
+    raise Exception(f"Command {cmdline} returned non-zero exit code")
 
 def DoSCPFile(file, remote_path, user, host, port=None, ssh_key=None):
     """Upload file to user@host:remote_path using scp. Optionally use
     port and ssh_key, if provided."""
     cmdline = ["scp"]
     AppendOptionalArgsToSSHCommandline(cmdline, port, ssh_key)
-    cmdline.extend([WindowsPathToMsysPath(file),
-                    "%s@%s:%s" % (user, host, remote_path)])
+    cmdline.extend([WindowsPathToMsysPath(file), f"{user}@{host}:{remote_path}"])
     with redo.retrying(check_call, sleeptime=10) as f:
         f(cmdline)
         return
 
-    raise Exception("Command %s returned non-zero exit code" % cmdline)
+    raise Exception(f"Command {cmdline} returned non-zero exit code")
 
 def GetRemotePath(path, local_file, base_path):
     """Given a remote path to upload to, a full path to a local file, and an

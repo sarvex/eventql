@@ -35,9 +35,11 @@ class TestSequenceFunctions(unittest.TestCase):
     converted = '&lt;test&gt;\'&quot;&#xD;&amp;&#xA;foo'
     converted_apos = converted.replace("'", '&apos;')
     self.assertEqual(
-      easy_xml.XmlToString(['test3', {'a': original}, original]),
-      '<?xml version="1.0" encoding="utf-8"?><test3 a="%s">%s</test3>' %
-      (converted, converted_apos))
+        easy_xml.XmlToString(['test3', {
+            'a': original
+        }, original]),
+        f'<?xml version="1.0" encoding="utf-8"?><test3 a="{converted}">{converted_apos}</test3>',
+    )
 
   def test_EasyXml_pretty(self):
     self.assertEqual(

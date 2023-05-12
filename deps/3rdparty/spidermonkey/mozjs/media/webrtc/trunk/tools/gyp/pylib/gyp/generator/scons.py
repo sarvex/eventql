@@ -42,7 +42,7 @@ generator_wants_absolute_build_file_paths = True
 
 
 def FixPath(path, prefix):
-  if not os.path.isabs(path) and not path[0] == '$':
+  if not os.path.isabs(path) and path[0] != '$':
     path = prefix + path
   return path
 
@@ -182,7 +182,7 @@ def InvertNaiveSConsQuoting(s):
   if ' ' in s or '\t' in s:
     # Then SCons will put double-quotes around this, so add our own quotes
     # to close its quotes at the beginning and end.
-    s = '"' + s + '"'
+    s = f'"{s}"'
   return s
 
 
@@ -223,29 +223,28 @@ def GenerateConfig(fp, config, indent='', src_dir=''):
   }
   postamble='\n%s],\n' % indent
   for scons_var in sorted(var_mapping.keys()):
-      gyp_var = var_mapping[scons_var]
-      value = config.get(gyp_var)
-      if value:
-        if gyp_var in ('defines',):
-          value = [EscapeCppDefine(v) for v in value]
-        if gyp_var in ('include_dirs',):
-          if src_dir and not src_dir.endswith('/'):
-            src_dir += '/'
-          result = []
-          for v in value:
-            v = FixPath(v, src_dir)
-            # Force SCons to evaluate the CPPPATH directories at
-            # SConscript-read time, so delayed evaluation of $SRC_DIR
-            # doesn't point it to the --generator-output= directory.
-            result.append('env.Dir(%r)' % v)
-          value = result
-        else:
-          value = map(repr, value)
-        WriteList(fp,
-                  value,
-                  prefix=indent,
-                  preamble='%s%s = [\n    ' % (indent, scons_var),
-                  postamble=postamble)
+    gyp_var = var_mapping[scons_var]
+    if value := config.get(gyp_var):
+      if gyp_var in ('defines',):
+        value = [EscapeCppDefine(v) for v in value]
+      if gyp_var in ('include_dirs',):
+        if src_dir and not src_dir.endswith('/'):
+          src_dir += '/'
+        result = []
+        for v in value:
+          v = FixPath(v, src_dir)
+          # Force SCons to evaluate the CPPPATH directories at
+          # SConscript-read time, so delayed evaluation of $SRC_DIR
+          # doesn't point it to the --generator-output= directory.
+          result.append('env.Dir(%r)' % v)
+        value = result
+      else:
+        value = map(repr, value)
+      WriteList(fp,
+                value,
+                prefix=indent,
+                preamble='%s%s = [\n    ' % (indent, scons_var),
+                postamble=postamble)
 
 
 def GenerateSConscript(output_filename, spec, build_file, build_file_data):
@@ -930,25 +929,22 @@ def GenerateSConscriptWrapper(build_file, build_file_data, name,
     sconscript_file_lines.append('    %s = %r,' % (target, sconscript))
   sconscript_file_lines.append(')')
 
-  fp = open(output_filename, 'w')
-  fp.write(header)
-  fp.write(_wrapper_template % {
-               'default_configuration' : default_configuration,
-               'name' : name,
-               'scons_tools' : repr(scons_tools),
-               'sconsbuild_dir' : repr(sconsbuild_dir),
-               'sconscript_files' : '\n'.join(sconscript_file_lines),
-               'src_dir' : src_dir_rel,
-           })
-  fp.close()
-
+  with open(output_filename, 'w') as fp:
+    fp.write(header)
+    fp.write(_wrapper_template % {
+                 'default_configuration' : default_configuration,
+                 'name' : name,
+                 'scons_tools' : repr(scons_tools),
+                 'sconsbuild_dir' : repr(sconsbuild_dir),
+                 'sconscript_files' : '\n'.join(sconscript_file_lines),
+                 'src_dir' : src_dir_rel,
+             })
   # Generate the SConstruct file that invokes the wrapper SConscript.
   dir, fname = os.path.split(output_filename)
   SConstruct = os.path.join(dir, 'SConstruct')
-  fp = open(SConstruct, 'w')
-  fp.write(header)
-  fp.write('SConscript(%s)\n' % repr(fname))
-  fp.close()
+  with open(SConstruct, 'w') as fp:
+    fp.write(header)
+    fp.write('SConscript(%s)\n' % repr(fname))
 
 
 def TargetFilename(target, build_file=None, output_suffix=''):
@@ -956,9 +952,8 @@ def TargetFilename(target, build_file=None, output_suffix=''):
   """
   if build_file is None:
     build_file, target = gyp.common.ParseQualifiedTarget(target)[:2]
-  output_file = os.path.join(os.path.dirname(build_file),
-                             target + output_suffix + '.scons')
-  return output_file
+  return os.path.join(os.path.dirname(build_file),
+                      target + output_suffix + '.scons')
 
 
 def PerformBuild(data, configurations, params):
@@ -1004,8 +999,8 @@ def GenerateOutput(target_list, target_dicts, data, params):
     spec = target_dicts[qualified_target]
     if spec['toolset'] != 'target':
       raise Exception(
-          'Multiple toolsets not supported in scons build (target %s)' %
-          qualified_target)
+          f'Multiple toolsets not supported in scons build (target {qualified_target})'
+      )
     scons_target = SCons.Target(spec)
     if scons_target.is_ignored:
       continue
@@ -1031,10 +1026,10 @@ def GenerateOutput(target_list, target_dicts, data, params):
     for d in deps:
       td = target_dicts[d]
       target_name = td['target_name']
-      spec['scons_dependencies'].append("Alias('%s')" % target_name)
+      spec['scons_dependencies'].append(f"Alias('{target_name}')")
       if td['type'] in ('static_library', 'shared_library'):
         libname = td.get('product_name', target_name)
-        spec['libraries'].append('lib' + libname)
+        spec['libraries'].append(f'lib{libname}')
       if td['type'] == 'loadable_module':
         prereqs = spec.get('scons_prerequisites', [])
         # TODO:  parameterize with <(SHARED_LIBRARY_*) variables?
@@ -1052,7 +1047,7 @@ def GenerateOutput(target_list, target_dicts, data, params):
     if ext != '.gyp':
       continue
     output_dir, basename = os.path.split(path)
-    output_filename  = path + '_main' + options.suffix + '.scons'
+    output_filename = f'{path}_main{options.suffix}.scons'
 
     all_targets = gyp.common.AllTargets(target_list, target_dicts, build_file)
     sconscript_files = {}

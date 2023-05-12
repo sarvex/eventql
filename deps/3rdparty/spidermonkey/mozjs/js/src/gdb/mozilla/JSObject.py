@@ -47,9 +47,7 @@ class JSObjectPtrOrRef(prettyprinters.Pointer):
             function = function.cast(self.otc.func_ptr_type)
             atom = deref(function['atom_'])
             name = str(atom) if atom else '<unnamed>'
-        return '[object %s%s]%s' % (class_name,
-                                    ' ' + name if name else '',
-                                    ' delegate' if is_delegate else '')
+        return f"[object {class_name}{f' {name}' if name else ''}]{' delegate' if is_delegate else ''}"
 
 @ref_pretty_printer('JSObject')
 def JSObjectRef(value, cache): return JSObjectPtrOrRef(value, cache)

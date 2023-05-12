@@ -68,12 +68,10 @@ class OutputHandler(object):
 
     def __call__(self, line):
         if self.number_of_stack_entries_to_get == 0:
-            # Look for the start of a Valgrind error.
-            m = re.search(self.re_error, line)
-            if m:
+            if m := re.search(self.re_error, line):
                 self.error_count += 1
                 self.number_of_stack_entries_to_get = 4
-                self.curr_failure_msg = 'TEST-UNEXPECTED-FAIL | valgrind-test | ' + m.group(1) + " at "
+                self.curr_failure_msg = f'TEST-UNEXPECTED-FAIL | valgrind-test | {m[1]} at '
                 self.buffered_lines = [line]
             else:
                 print(line)
@@ -82,9 +80,8 @@ class OutputHandler(object):
             # We've recently found a Valgrind error, and are now extracting
             # details from the first few stack entries.
             self.buffered_lines.append(line)
-            m = re.match(self.re_stack_entry, line)
-            if m:
-                self.curr_failure_msg += m.group(1)
+            if m := re.match(self.re_stack_entry, line):
+                self.curr_failure_msg += m[1]
             else:
                 self.curr_failure_msg += '?!?'
 

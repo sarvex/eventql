@@ -237,7 +237,7 @@ class RemoteAutomation(Automation):
         return app, args
 
     def Process(self, cmd, stdout = None, stderr = None, env = None, cwd = None):
-        if stdout == None or stdout == -1 or stdout == subprocess.PIPE:
+        if stdout is None or stdout == -1 or stdout == subprocess.PIPE:
             stdout = self._remoteLog
 
         return self.RProcess(self._devicemanager, cmd, stdout, stderr, env, cwd, self._appName,
@@ -280,9 +280,7 @@ class RemoteAutomation(Automation):
             # running processes for the remote case, but for now we'll assume
             # that this method can be called when nothing exists and it is not
             # an error
-            if pid is None:
-                return 0
-            return pid
+            return 0 if pid is None else pid
 
         def read_stdout(self):
             """ Fetch the full remote log file using devicemanager and return just
@@ -343,7 +341,7 @@ class RemoteAutomation(Automation):
             noOutputTimer = 0
             interval = 20
 
-            if timeout == None:
+            if timeout is None:
                 timeout = self.timeout
 
             status = 0

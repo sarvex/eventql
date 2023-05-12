@@ -51,9 +51,7 @@ def ToCAsciiArray(lines):
   return ", ".join(result)
 
 def ToCArray(lines):
-  result = []
-  for chr in lines:
-    result.append(str(ord(chr)))
+  result = [str(ord(chr)) for chr in lines]
   return ", ".join(result)
 
 HEADER_TEMPLATE = """\
@@ -123,9 +121,8 @@ def preprocess(cxx, preprocessorOption, source, args = []):
 def messages(jsmsg):
   defines = []
   for line in open(jsmsg):
-    match = re.match("MSG_DEF\((JSMSG_(\w+))", line)
-    if match:
-      defines.append("#define %s %i" % (match.group(1), len(defines)))
+    if match := re.match("MSG_DEF\((JSMSG_(\w+))", line):
+      defines.append("#define %s %i" % (match[1], len(defines)))
     else:
       # Make sure that MSG_DEF isn't preceded by whitespace
       assert not line.strip().startswith("MSG_DEF")

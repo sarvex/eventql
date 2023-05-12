@@ -19,7 +19,7 @@ class TestMozUnit(unittest.TestCase):
         self.assertFalse(os.path.exists('file2'))
 
         with MockedOpen({'file1': 'content1',
-                         'file2': 'content2'}):
+                             'file2': 'content2'}):
             self.assertTrue(os.path.exists('file1'))
             self.assertTrue(os.path.exists('file2'))
             self.assertFalse(os.path.exists('foo/file1'))
@@ -34,11 +34,9 @@ class TestMozUnit(unittest.TestCase):
             self.assertTrue(os.path.exists('file1'))
             self.assertEqual(open('file1', 'r').read(), 'foo')
 
-            # ... but not until the file is closed.
-            file = open('file2', 'w')
-            file.write('bar')
-            self.assertEqual(open('file2', 'r').read(), 'content2')
-            file.close()
+            with open('file2', 'w') as file:
+                file.write('bar')
+                self.assertEqual(open('file2', 'r').read(), 'content2')
             self.assertEqual(open('file2', 'r').read(), 'bar')
 
             # Check that appending to a file does append

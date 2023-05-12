@@ -6,6 +6,7 @@ make.py
 A drop-in or mostly drop-in replacement for GNU make.
 """
 
+
 import sys, os
 import pymake.command, pymake.process
 
@@ -22,7 +23,7 @@ if __name__ == '__main__':
     cmd.extend(sys.argv[1:])
     shell = os.environ.get('SHELL')
     if shell and not shell.lower().endswith('.exe'):
-        cmd += ['SHELL=%s.exe' % shell]
+      cmd += [f'SHELL={shell}.exe']
     sys.exit(subprocess.call(cmd))
 
   sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)

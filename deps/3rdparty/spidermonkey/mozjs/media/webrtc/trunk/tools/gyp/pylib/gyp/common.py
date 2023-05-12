@@ -39,9 +39,9 @@ def ExceptionAppend(e, msg):
   if not e.args:
     e.args = (msg,)
   elif len(e.args) == 1:
-    e.args = (str(e.args[0]) + ' ' + msg,)
+    e.args = (f'{str(e.args[0])} {msg}', )
   else:
-    e.args = (str(e.args[0]) + ' ' + msg,) + e.args[1:]
+    e.args = (f'{str(e.args[0])} {msg}', ) + e.args[1:]
 
 
 def ParseQualifiedTarget(target):
@@ -115,9 +115,9 @@ def QualifiedTarget(build_file, target, toolset):
   # "Qualified" means the file that a target was defined in and the target
   # name, separated by a colon, suffixed by a # and the toolset name:
   # /path/to/file.gyp:target_name#toolset
-  fully_qualified = build_file + ':' + target
+  fully_qualified = f'{build_file}:{target}'
   if toolset:
-    fully_qualified = fully_qualified + '#' + toolset
+    fully_qualified = f'{fully_qualified}#{toolset}'
   return fully_qualified
 
 
@@ -143,19 +143,12 @@ def RelativePath(path, relative_to):
   relative_split = [os.path.pardir] * (len(relative_to_split) - prefix_len) + \
                    path_split[prefix_len:]
 
-  if len(relative_split) == 0:
-    # The paths were the same.
-    return ''
-
-  # Turn it back into a string and we're done.
-  return os.path.join(*relative_split)
+  return '' if len(relative_split) == 0 else os.path.join(*relative_split)
 
 
 def FixIfRelativePath(path, relative_to):
   # Like RelativePath but returns |path| unchanged if it is absolute.
-  if os.path.isabs(path):
-    return path
-  return RelativePath(path, relative_to)
+  return path if os.path.isabs(path) else RelativePath(path, relative_to)
 
 
 def UnrelativePath(path, relative_to):
@@ -233,14 +226,8 @@ def EncodePOSIXShellArgument(argument):
   if not isinstance(argument, str):
     argument = str(argument)
 
-  if _quote.search(argument):
-    quote = '"'
-  else:
-    quote = ''
-
-  encoded = quote + re.sub(_escape, r'\\\1', argument) + quote
-
-  return encoded
+  quote = '"' if _quote.search(argument) else ''
+  return quote + re.sub(_escape, r'\\\1', argument) + quote
 
 
 def EncodePOSIXShellList(list):
@@ -250,9 +237,7 @@ def EncodePOSIXShellList(list):
   together using the space character as an argument separator.
   """
 
-  encoded_arguments = []
-  for argument in list:
-    encoded_arguments.append(EncodePOSIXShellArgument(argument))
+  encoded_arguments = [EncodePOSIXShellArgument(argument) for argument in list]
   return ' '.join(encoded_arguments)
 
 
@@ -376,10 +361,7 @@ def GetFlavor(params):
     return flavors[sys.platform]
   if sys.platform.startswith('sunos'):
     return 'solaris'
-  if sys.platform.startswith('freebsd'):
-    return 'freebsd'
-
-  return 'linux'
+  return 'freebsd' if sys.platform.startswith('freebsd') else 'linux'
 
 
 def CopyTool(flavor, out_path):
@@ -429,7 +411,7 @@ class CycleError(Exception):
   def __init__(self, nodes):
     self.nodes = nodes
   def __str__(self):
-    return 'CycleError: cycle involving: ' + str(self.nodes)
+    return f'CycleError: cycle involving: {str(self.nodes)}'
 
 
 def TopologicallySorted(graph, get_edges):

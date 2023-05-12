@@ -63,24 +63,24 @@ def rm(args):
       raise PythonException, ("rm: cannot remove '%s': No such file or directory" % f, 1)
 
 def sleep(args):
-    """
+  """
     Emulate the behavior of sleep(1).
     """
-    total = 0
-    values = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
-    for a in args:
-        multiplier = 1
-        for k, v in values.iteritems():
-            if a.endswith(k):
-                a = a[:-1]
-                multiplier = v
-                break
-        try:
-            f = float(a)
-            total += f * multiplier
-        except ValueError:
-            raise PythonException, ("sleep: invalid time interval '%s'" % a, 1)
-    time.sleep(total)
+  total = 0
+  values = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+  for a in args:
+    multiplier = 1
+    for k, v in values.iteritems():
+        if a.endswith(k):
+            a = a[:-1]
+            multiplier = v
+            break
+    try:
+      f = float(a)
+      total += f * multiplier
+    except ValueError:
+      raise (PythonException, (f"sleep: invalid time interval '{a}'", 1))
+  time.sleep(total)
 
 def touch(args):
     """

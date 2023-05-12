@@ -23,11 +23,7 @@ def glob(fsdir, path):
     if dir == '':
         return globpattern(fsdir, leaf)
 
-    if hasglob(dir):
-        dirsfound = glob(fsdir, dir)
-    else:
-        dirsfound = [dir]
-
+    dirsfound = glob(fsdir, dir) if hasglob(dir) else [dir]
     r = []
 
     for dir in dirsfound:
@@ -46,14 +42,8 @@ def globpattern(dir, pattern):
 
     if not hasglob(pattern):
         if pattern == '':
-            if os.path.isdir(dir):
-                return ['']
-            return []
-
-        if os.path.exists(util.normaljoin(dir, pattern)):
-            return [pattern]
-        return []
-
+            return [''] if os.path.isdir(dir) else []
+        return [pattern] if os.path.exists(util.normaljoin(dir, pattern)) else []
     leaves = os.listdir(dir) + ['.', '..']
 
     # "hidden" filenames are a bit special

@@ -30,6 +30,7 @@ from optparse import OptionParser
 # Utility functions
 #####################################################################
 def run(args, stdin=None):
+
   class ThreadWorker(threading.Thread):
     def __init__(self, pipe):
       super(ThreadWorker, self).__init__()
@@ -69,8 +70,7 @@ def run(args, stdin=None):
     sys.exit(-1)
 
   stdout, stderr = stdout_worker.all, stderr_worker.all
-  result = (stdout, stderr, proc.returncode)
-  return result
+  return stdout, stderr, proc.returncode
 
 def get_js_files():
   (out, err, exit) = run('find ../jit-test/tests -name "*.js"')
@@ -99,10 +99,7 @@ def count_lines():
     for line in string.split("\n"):
       counts[line] = counts.get(line, 0) + count
 
-  lines = []
-  for k,v in counts.items():
-    lines.append("{0:6}: {1}".format(v, k))
-
+  lines = ["{0:6}: {1}".format(v, k) for k, v in counts.items()]
   lines.sort()
 
   countlog = file("../OOM_count_log", "w")
@@ -182,12 +179,10 @@ blacklist = {}
 add_to_blacklist(r"('', '', 1)") # 1 means OOM if the shell hasn't launched yet.
 add_to_blacklist(r"('', 'out of memory\n', 1)")
 
-whitelist = set()
-whitelist.add(r"('', 'out of memory\n', -11)") # -11 means OOM
-whitelist.add(r"('', 'out of memory\nout of memory\n', -11)")
-
-
-
+whitelist = {
+    "('', 'out of memory\n', -11)",
+    "('', 'out of memory\nout of memory\n', -11)",
+}
 #####################################################################
 # Program
 #####################################################################
@@ -196,16 +191,11 @@ whitelist.add(r"('', 'out of memory\nout of memory\n', -11)")
 parser = OptionParser(usage=usage)
 parser.add_option("-r", "--regression", action="store", metavar="REGRESSION_COUNT", help=help,
                   type="int", dest="regression", default=None)
-                  
+
 (OPTIONS, args) = parser.parse_args()
 
 
-if OPTIONS.regression != None:
-  # TODO: This should be expanded as we get a better hang of the OOM problems.
-  # For now, we'll just check that the number of OOMs in one short file does not
-  # increase.
-  files = ["../jit-test/tests/arguments/args-createontrace.js"]
-else:
+if OPTIONS.regression is None:
   files = get_js_files()
 
   # Use a command-line arg to reduce the set of files
@@ -213,7 +203,12 @@ else:
     files = [f for f in files if f.find(args[0]) != -1]
 
 
-if OPTIONS.regression == None:
+else:
+  # TODO: This should be expanded as we get a better hang of the OOM problems.
+  # For now, we'll just check that the number of OOMs in one short file does not
+  # increase.
+  files = ["../jit-test/tests/arguments/args-createontrace.js"]
+if OPTIONS.regression is None:
   # Don't use a logfile, this is automated for tinderbox.
   log = file("../OOM_log", "w")
 
@@ -222,16 +217,16 @@ num_failures = 0
 for f in files:
 
   # Run it once to establish boundaries
-  command = (command_template + ' -O').format(f)
+  command = f'{command_template} -O'.format(f)
   out, err, exit = run(command)
   max = re.match(".*OOM max count: (\d+).*", out, flags=re.DOTALL).groups()[0]
   max = int(max)
-  
+
   # OOMs don't recover well for the first 20 allocations or so.
   # TODO: revisit this.
   for i in range(20, max): 
 
-    if OPTIONS.regression == None:
+    if OPTIONS.regression is None:
       print("Testing allocation {0}/{1} in {2}".format(i,max,f))
     else:
       sys.stdout.write('.') # something short for tinderbox, no space or \n
@@ -239,90 +234,86 @@ for f in files:
     command = (command_template + ' -A {0}').format(f, i)
     out, err, exit = run(command)
 
-    # Success (5 is SM's exit code for controlled errors)
     if exit == 5 and err.find("out of memory") != -1:
       continue
 
-    # Failure
-    else:
+    if OPTIONS.regression != None:
+      # Just count them
+      num_failures += 1
+      continue
 
-      if OPTIONS.regression != None:
-        # Just count them
-        num_failures += 1
-        continue
+    #########################################################################
+    # The regression tests ends above. The rest of this is for running  the
+    # script manually.
+    #########################################################################
 
-      #########################################################################
-      # The regression tests ends above. The rest of this is for running  the
-      # script manually.
-      #########################################################################
-
-      problem = str((out, err, exit))
-      if in_blacklist(problem) and problem not in whitelist:
-        add_to_blacklist(problem)
-        continue
-
+    problem = str((out, err, exit))
+    if in_blacklist(problem) and problem not in whitelist:
       add_to_blacklist(problem)
+      continue
+
+    add_to_blacklist(problem)
 
 
       # Get valgrind output for a good stack trace
-      vcommand = "valgrind --dsymutil=yes -q --log-file=OOM_valgrind_log_file " + command
-      run(vcommand)
-      vout = file("OOM_valgrind_log_file").read()
-      vout = clean_voutput(vout)
-      sans_alloc_sites = remove_failed_allocation_backtraces(vout)
+    vcommand = f"valgrind --dsymutil=yes -q --log-file=OOM_valgrind_log_file {command}"
+    run(vcommand)
+    vout = file("OOM_valgrind_log_file").read()
+    vout = clean_voutput(vout)
+    sans_alloc_sites = remove_failed_allocation_backtraces(vout)
 
-      # Don't print duplicate information
-      if in_blacklist(sans_alloc_sites):
-        add_to_blacklist(sans_alloc_sites)
-        continue
-
+    # Don't print duplicate information
+    if in_blacklist(sans_alloc_sites):
       add_to_blacklist(sans_alloc_sites)
+      continue
 
+    add_to_blacklist(sans_alloc_sites)
+
+    log.write ("\n")
+    log.write ("\n")
+    log.write ("=========================================================================")
+    log.write ("\n")
+    log.write ("An allocation failure at\n\tallocation {0}/{1} in {2}\n\t"
+               "causes problems (detected using bug 624094)"
+               .format(i, max, f))
+    log.write ("\n")
+    log.write ("\n")
+
+    log.write ("Command (from obj directory, using patch from bug 624094):\n  " + command)
+    log.write ("\n")
+    log.write ("\n")
+    log.write ("stdout, stderr, exitcode:\n  " + problem)
+    log.write ("\n")
+    log.write ("\n")
+
+    double_free = err.find("pointer being freed was not allocated") != -1
+    oom_detected = err.find("out of memory") != -1
+    multiple_oom_detected = err.find("out of memory\nout of memory") != -1
+    segfault_detected = exit == -11
+
+    log.write ("Diagnosis: ")
+    log.write ("\n")
+    if multiple_oom_detected:
+      log.write ("  - Multiple OOMs reported")
       log.write ("\n")
+    if segfault_detected:
+      log.write ("  - segfault")
       log.write ("\n")
-      log.write ("=========================================================================")
+    if not oom_detected:
+      log.write ("  - No OOM checking")
       log.write ("\n")
-      log.write ("An allocation failure at\n\tallocation {0}/{1} in {2}\n\t"
-                 "causes problems (detected using bug 624094)"
-                 .format(i, max, f))
-      log.write ("\n")
+    if double_free:
+      log.write ("  - Double free")
       log.write ("\n")
 
-      log.write ("Command (from obj directory, using patch from bug 624094):\n  " + command)
-      log.write ("\n")
-      log.write ("\n")
-      log.write ("stdout, stderr, exitcode:\n  " + problem)
-      log.write ("\n")
-      log.write ("\n")
+    log.write ("\n")
 
-      double_free = err.find("pointer being freed was not allocated") != -1
-      oom_detected = err.find("out of memory") != -1
-      multiple_oom_detected = err.find("out of memory\nout of memory") != -1
-      segfault_detected = exit == -11
+    log.write ("Valgrind info:\n" + vout)
+    log.write ("\n")
+    log.write ("\n")
+    log.flush()
 
-      log.write ("Diagnosis: ")
-      log.write ("\n")
-      if multiple_oom_detected:
-        log.write ("  - Multiple OOMs reported")
-        log.write ("\n")
-      if segfault_detected:
-        log.write ("  - segfault")
-        log.write ("\n")
-      if not oom_detected:
-        log.write ("  - No OOM checking")
-        log.write ("\n")
-      if double_free:
-        log.write ("  - Double free")
-        log.write ("\n")
-
-      log.write ("\n")
-
-      log.write ("Valgrind info:\n" + vout)
-      log.write ("\n")
-      log.write ("\n")
-      log.flush()
-
-  if OPTIONS.regression == None:
+  if OPTIONS.regression is None:
     count_lines()
 
 print()

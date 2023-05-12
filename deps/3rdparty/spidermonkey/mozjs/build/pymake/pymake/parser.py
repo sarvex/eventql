@@ -70,10 +70,7 @@ class Data(object):
         only whitespace characters remaining.
         """
         m = _skipws.search(self.s, offset, self.lend)
-        if m is None:
-            return self.lend
-
-        return m.start(0)
+        return self.lend if m is None else m.start(0)
 
 _linere = re.compile(r'\\*\n')
 def enumeratelines(s, filename):
@@ -139,9 +136,7 @@ def iterdata(d, offset, tokenlist, it):
 _makecontinuations = re.compile(r'(?:\s*|((?:\\\\)+))\\\n\s*')
 def _replacemakecontinuations(m):
     start, end = m.span(1)
-    if start == -1:
-        return ' '
-    return ' '.rjust((end - start) / 2 + 1, '\\')
+    return ' ' if start == -1 else ' '.rjust((end - start) / 2 + 1, '\\')
 
 def itermakefilechars(d, offset, tokenlist, it, ignorecomments=False):
     """
@@ -293,7 +288,6 @@ def ifeq(d, offset):
         if t is None:
             raise SyntaxError("Unexpected text in conditional", d.getloc(offset))
 
-        _ensureend(d, offset, "Unexpected text after conditional")
     else:
         arg1, t, offset = parsemakesyntax(d, offset, (token,), itermakefilechars)
         if t is None:
@@ -309,8 +303,7 @@ def ifeq(d, offset):
 
         arg2, t, offset = parsemakesyntax(d, offset + 1, (token,), itermakefilechars)
 
-        _ensureend(d, offset, "Unexpected text after conditional")
-
+    _ensureend(d, offset, "Unexpected text after conditional")
     return parserdata.EqCondition(arg1, arg2)
 
 def ifneq(d, offset):
@@ -347,10 +340,9 @@ _directivesre = re.compile(r'(%s)(?:$|\s+)' % '|'.join(_directivestokenlist))
 _varsettokens = (':=', '+=', '?=', '=')
 
 def _parsefile(pathname):
-    fd = open(pathname, "rU")
-    stmts = parsestring(fd.read(), pathname)
-    stmts.mtime = os.fstat(fd.fileno()).st_mtime
-    fd.close()
+    with open(pathname, "rU") as fd:
+        stmts = parsestring(fd.read(), pathname)
+        stmts.mtime = os.fstat(fd.fileno()).st_mtime
     return stmts
 
 def _checktime(path, stmts):
@@ -432,7 +424,7 @@ def parsestring(s, filename):
 
     fdlines = enumeratelines(s, filename)
     for d in fdlines:
-        assert len(condstack) > 0
+        assert condstack
 
         offset = d.lstart
 
@@ -464,7 +456,7 @@ def parsestring(s, filename):
 
                 condstack.pop().endloc = d.getloc(offset)
                 continue
-            
+
             if kword == 'else':
                 if len(condstack) == 1:
                     raise SyntaxError("unmatched 'else' directive",
@@ -763,7 +755,7 @@ def parsemakesyntax(d, offset, stopon, iterfunc):
                 fn = stacktop.function
                 fn.append(stacktop.expansion.finish())
                 fn.setup()
-                
+
                 stacktop = stacktop.parent
                 stacktop.expansion.appendfunc(fn)
             else:
@@ -806,7 +798,7 @@ def parsemakesyntax(d, offset, stopon, iterfunc):
             stacktop = stacktop.parent
             stacktop.expansion.appendfunc(fn)
         else:
-            assert False, "Unexpected parse state %s" % stacktop.parsestate
+            assert False, f"Unexpected parse state {stacktop.parsestate}"
 
         if stacktop.parent is not None and iterfunc == itercommandchars:
             di = itermakefilechars(d, offset, stacktop.tokenlist, tokeniterator,

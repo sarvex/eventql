@@ -19,8 +19,7 @@ def emit_expansions(descend, *expansions):
 
         for e, is_func in expansion:
             if is_func:
-                for exp in e.expansions(True):
-                    yield exp
+                yield from e.expansions(True)
             else:
                 yield e
 
@@ -51,7 +50,10 @@ class Function(object):
         argc = len(self._arguments)
 
         if argc < self.minargs:
-            raise data.DataError("Not enough arguments to function %s, requires %s" % (self.name, self.minargs), self.loc)
+            raise data.DataError(
+                f"Not enough arguments to function {self.name}, requires {self.minargs}",
+                self.loc,
+            )
 
         assert self.maxargs == 0 or argc <= self.maxargs, "Parser screwed up, gave us too many args"
 
@@ -62,7 +64,7 @@ class Function(object):
     def to_source(self):
         """Convert the function back to make file "source" code."""
         if not hasattr(self, 'name'):
-            raise Exception("%s must implement to_source()." % self.__class__)
+            raise Exception(f"{self.__class__} must implement to_source().")
 
         # The default implementation simply prints the function name and all
         # the arguments joined by a comma.
@@ -86,7 +88,7 @@ class Function(object):
         if curly:
             return '${%s %s}' % (self.name, ','.join(args))
 
-        return '$(%s %s)' % (self.name, ','.join(args))
+        return f"$({self.name} {','.join(args)})"
 
     def expansions(self, descend=False):
         """Obtain all expansions contained within this function.
@@ -124,7 +126,7 @@ class Function(object):
 
     def __eq__(self, other):
         if not hasattr(self, 'name'):
-            raise Exception("%s must implement __eq__." % self.__class__)
+            raise Exception(f"{self.__class__} must implement __eq__.")
 
         if type(self) != type(other):
             return False
@@ -175,11 +177,14 @@ class VariableRef(Function):
     def resolve(self, makefile, variables, fd, setting):
         vname = self.vname.resolvestr(makefile, variables, setting)
         if vname in setting:
-            raise data.DataError("Setting variable '%s' recursively references itself." % (vname,), self.loc)
+            raise data.DataError(
+                f"Setting variable '{vname}' recursively references itself.",
+                self.loc,
+            )
 
         flavor, source, value = variables.get(vname)
         if value is None:
-            log.debug("%s: variable '%s' was not set" % (self.loc, vname))
+            log.debug(f"{self.loc}: variable '{vname}' was not set")
             return
 
         value.resolve(makefile, variables, fd, setting + [vname])
@@ -187,11 +192,11 @@ class VariableRef(Function):
     def to_source(self):
         if isinstance(self.vname, data.StringExpansion):
             if self.vname.s in self.AUTOMATIC_VARIABLES:
-                return '$%s' % self.vname.s
+                return f'${self.vname.s}'
 
-            return '$(%s)' % self.vname.s
+            return f'$({self.vname.s})'
 
-        return '$(%s)' % self.vname.to_source()
+        return f'$({self.vname.to_source()})'
 
     def expansions(self, descend=False):
         return emit_expansions(descend, self.vname)
@@ -200,10 +205,7 @@ class VariableRef(Function):
         return "VariableRef<%s>(%r)" % (self.loc, self.vname)
 
     def __eq__(self, other):
-        if not isinstance(other, VariableRef):
-            return False
-
-        return self.vname == other.vname
+        return self.vname == other.vname if isinstance(other, VariableRef) else False
 
 class SubstitutionRef(Function):
     """$(VARNAME:.c=.o) and $(VARNAME:%.c=%.o)"""
@@ -222,29 +224,29 @@ class SubstitutionRef(Function):
     def resolve(self, makefile, variables, fd, setting):
         vname = self.vname.resolvestr(makefile, variables, setting)
         if vname in setting:
-            raise data.DataError("Setting variable '%s' recursively references itself." % (vname,), self.loc)
+            raise data.DataError(
+                f"Setting variable '{vname}' recursively references itself.",
+                self.loc,
+            )
 
         substfrom = self.substfrom.resolvestr(makefile, variables, setting)
         substto = self.substto.resolvestr(makefile, variables, setting)
 
         flavor, source, value = variables.get(vname)
         if value is None:
-            log.debug("%s: variable '%s' was not set" % (self.loc, vname))
+            log.debug(f"{self.loc}: variable '{vname}' was not set")
             return
 
         f = data.Pattern(substfrom)
         if not f.ispattern():
-            f = data.Pattern('%' + substfrom)
-            substto = '%' + substto
+            f = data.Pattern(f'%{substfrom}')
+            substto = f'%{substto}'
 
         fd.write(' '.join([f.subst(substto, word, False)
                            for word in value.resolvesplit(makefile, variables, setting + [vname])]))
 
     def to_source(self):
-        return '$(%s:%s=%s)' % (
-            self.vname.to_source(),
-            self.substfrom.to_source(),
-            self.substto.to_source())
+        return f'$({self.vname.to_source()}:{self.substfrom.to_source()}={self.substto.to_source()})'
 
     def expansions(self, descend=False):
         return emit_expansions(descend, self.vname, self.substfrom,
@@ -384,11 +386,8 @@ class WordlistFunction(Function):
 
         words = list(self._arguments[2].resolvesplit(makefile, variables, setting))
 
-        if nfrom < 1:
-            nfrom = 1
-        if nto < 1:
-            nto = 1
-
+        nfrom = max(nfrom, 1)
+        nto = max(nto, 1)
         util.joiniter(fd, words[nfrom - 1:nto])
 
 class WordsFunction(Function):
@@ -431,10 +430,7 @@ def pathsplit(path, default='./'):
     is ./
     """
     dir, slash, file = util.strrpartition(path, '/')
-    if dir == '':
-        return default, file
-
-    return dir + slash, file
+    return (default, file) if dir == '' else (dir + slash, file)
 
 class DirFunction(Function):
     name = 'dir'
@@ -666,7 +662,7 @@ class CallFunction(Function):
     def resolve(self, makefile, variables, fd, setting):
         vname = self._arguments[0].resolvestr(makefile, variables, setting)
         if vname in setting:
-            raise data.DataError("Recursively setting variable '%s'" % (vname,))
+            raise data.DataError(f"Recursively setting variable '{vname}'")
 
         v = data.Variables(parent=variables)
         v.set('0', data.Variables.FLAVOR_SIMPLE, data.Variables.SOURCE_AUTOMATIC, vname)
@@ -680,7 +676,7 @@ class CallFunction(Function):
             return
 
         if flavor == data.Variables.FLAVOR_SIMPLE:
-            log.warning("%s: calling variable '%s' which is simply-expanded" % (self.loc, vname))
+            log.warning(f"{self.loc}: calling variable '{vname}' which is simply-expanded")
 
         # but we'll do it anyway
         e.resolve(makefile, v, fd, setting + [vname])
@@ -710,8 +706,10 @@ class EvalFunction(Function):
             # command execution. This seems really dumb to me, so I don't!
             raise data.DataError("$(eval) not allowed via recursive expansion after parsing is finished", self.loc)
 
-        stmts = parser.parsestring(self._arguments[0].resolvestr(makefile, variables, setting),
-                                   'evaluation from %s' % self.loc)
+        stmts = parser.parsestring(
+            self._arguments[0].resolvestr(makefile, variables, setting),
+            f'evaluation from {self.loc}',
+        )
         stmts.execute(makefile)
 
 class OriginFunction(Function):

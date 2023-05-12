@@ -167,7 +167,7 @@ def bootstrap(topsrcdir, mozilla_dir=None):
     try:
         import mach.main
     except ImportError:
-        sys.path[0:0] = [os.path.join(mozilla_dir, path) for path in SEARCH_PATHS]
+        sys.path[:0] = [os.path.join(mozilla_dir, path) for path in SEARCH_PATHS]
         import mach.main
 
     def populate_context(context, key=None):
@@ -178,8 +178,9 @@ def bootstrap(topsrcdir, mozilla_dir=None):
             state_env_dir = os.environ.get('MOZBUILD_STATE_PATH', None)
             if state_env_dir:
                 if not os.path.exists(state_env_dir):
-                    print('Creating global state directory from environment variable: %s'
-                        % state_env_dir)
+                    print(
+                        f'Creating global state directory from environment variable: {state_env_dir}'
+                    )
                     os.makedirs(state_env_dir, mode=0o770)
                     print('Please re-run mach.')
                     sys.exit(1)

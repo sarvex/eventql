@@ -52,14 +52,12 @@ def IsPathSection(section):
   # without the trailing characters.  '/' is notably absent from this list,
   # because there's no way for a regular expression to be treated as a path.
   while section[-1:] in ('=', '+', '?', '!'):
-    section = section[0:-1]
+    section = section[:-1]
 
-  if section in path_sections or \
-     section.endswith('_dir') or section.endswith('_dirs') or \
-     section.endswith('_file') or section.endswith('_files') or \
-     section.endswith('_path') or section.endswith('_paths'):
-    return True
-  return False
+  return bool(section in path_sections or section.endswith('_dir')
+              or section.endswith('_dirs') or section.endswith('_file')
+              or section.endswith('_files') or section.endswith('_path')
+              or section.endswith('_paths'))
 
 
 # base_non_configuraiton_keys is a list of key names that belong in the target
@@ -139,7 +137,7 @@ def GetIncludedBuildFiles(build_file_path, aux_data, included=None):
   in the list will be relative to the current directory.
   """
 
-  if included == None:
+  if included is None:
     included = []
 
   if build_file_path in included:
@@ -182,9 +180,9 @@ def CheckNode(node, keypath):
       assert isinstance(c[n], Const)
       key = c[n].getChildren()[0]
       if key in dict:
-        raise GypError("Key '" + key + "' repeated at level " +
-              repr(len(keypath) + 1) + " with key path '" +
-              '.'.join(keypath) + "'")
+        raise GypError(((
+            f"Key '{key}' repeated at level {repr(len(keypath) + 1)} with key path '"
+            + '.'.join(keypath)) + "'"))
       kp = list(keypath)  # Make a copy of the list for descending this node.
       kp.append(key)
       dict[key] = CheckNode(c[n + 1], kp)
@@ -265,11 +263,11 @@ def LoadBuildFileIncludesIntoDict(subdict, subdict_path, data, aux_data,
 
   # Merge in the included files.
   for include in includes_list:
-    if not 'included' in aux_data[subdict_path]:
+    if 'included' not in aux_data[subdict_path]:
       aux_data[subdict_path]['included'] = []
     aux_data[subdict_path]['included'].append(include)
 
-    gyp.DebugOutput(gyp.DEBUG_INCLUDES, "Loading Included File: '%s'" % include)
+    gyp.DebugOutput(gyp.DEBUG_INCLUDES, f"Loading Included File: '{include}'")
 
     MergeDicts(subdict,
                LoadOneBuildFile(include, data, aux_data, variables, None,
@@ -620,14 +618,14 @@ def FindEnclosingBracketGroup(input):
       stack.append(char)
       if start == -1:
         start = count
-    if char in brackets.keys():
+    if char in brackets:
       try:
         last_bracket = stack.pop()
       except IndexError:
         return (-1, -1)
       if last_bracket != brackets[char]:
         return (-1, -1)
-      if len(stack) == 0:
+      if not stack:
         return (start, count + 1)
     count = count + 1
   return (-1, -1)
@@ -641,10 +639,7 @@ def IsStrCanonicalInt(string):
 
   The canonical form is such that str(int(string)) == string.
   """
-  if not isinstance(string, str) or not canonical_int_re.match(string):
-    return False
-
-  return True
+  return bool(isinstance(string, str) and canonical_int_re.match(string))
 
 
 # This matches things like "<(asdf)", "<!(cmd)", "<!@(cmd)", "<|(list)",

@@ -19,12 +19,12 @@ def generate(args):
             if os.path.exists(arg):
                 desc['OBJS'].append(os.path.abspath(arg))
             else:
-                raise Exception("File not found: %s" % arg)
+                raise Exception(f"File not found: {arg}")
         elif os.path.splitext(arg)[1] == conf.LIB_SUFFIX:
             if os.path.exists(arg) or os.path.exists(arg + conf.LIBS_DESC_SUFFIX):
                 desc['LIBS'].append(os.path.abspath(arg))
             else:
-                raise Exception("File not found: %s" % arg)
+                raise Exception(f"File not found: {arg}")
     return desc
 
 if __name__ == '__main__':

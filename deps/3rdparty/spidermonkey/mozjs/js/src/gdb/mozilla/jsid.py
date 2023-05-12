@@ -54,7 +54,7 @@ class jsid(object):
                     .cast(self.cache.JSSymbol_ptr_t))
         else:
             body = "<unrecognized>"
-        return '$jsid(%s)' % (body,)
+        return f'$jsid({body})'
 
 # Hard-code the referent type pretty-printer for jsid roots and handles.
 # See the comment for mozilla.Root.Common.__init__.

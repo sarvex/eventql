@@ -32,7 +32,7 @@ def get_xdr_version(dir):
     if not m:
         error('XDR_BYTECODE_VERSION_SUBTRAHEND is not recognized.')
 
-    subtrahend = int(m.group(1))
+    subtrahend = int(m[1])
 
     m = version_expr_pat.search(data)
     if not m:
@@ -58,9 +58,8 @@ def parse_index(comment):
     category_name = ''
     category_pat = re.compile('\[([^\]]+)\]')
     for line in get_comment_body(comment):
-        m = category_pat.search(line)
-        if m:
-            category_name = m.group(1)
+        if m := category_pat.search(line):
+            category_name = m[1]
             if category_name == 'Index':
                 continue
             current_types = []
@@ -96,11 +95,7 @@ class OpcodeInfo:
         self.sort_key = ''
 
 def find_by_name(list, name):
-    for (n, body) in list:
-        if n == name:
-            return body
-
-    return None
+    return next((body for n, body in list if n == name), None)
 
 def add_to_index(index, opcode):
     types = find_by_name(index, opcode.category_name)
@@ -126,7 +121,7 @@ def format_desc(descs):
             if current_type:
                 desc += '</{name}>\n'.format(name=current_type)
             current_type = type
-            if type:
+            if current_type:
                 desc += '<{name}>'.format(name=current_type)
         if current_type:
             desc += line + "\n"
@@ -210,23 +205,22 @@ def get_opcodes(dir):
                         else:
                             descs.append(('p', codify(escape(line))))
                 elif line.startswith('  '):
-                    if state == 'operands':
-                        opcode.operands += line.strip()
-                    elif state == 'stack':
-                        stack += line.strip()
-                    elif state == 'len':
+                    if state == 'len':
                         opcode.length_override += line.strip()
-                    elif state == 'nuses':
-                        opcode.nuses_override += line.strip()
                     elif state == 'ndefs':
                         opcode.ndefs_override += line.strip()
 
+                    elif state == 'nuses':
+                        opcode.nuses_override += line.strip()
+                    elif state == 'operands':
+                        opcode.operands += line.strip()
+                    elif state == 'stack':
+                        stack += line.strip()
             opcode.desc = format_desc(descs)
 
-            m2 = stack_pat.search(stack)
-            if m2:
-                opcode.stack_uses = m2.group(1)
-                opcode.stack_defs = m2.group(2)
+            if m2 := stack_pat.search(stack):
+                opcode.stack_uses = m2[1]
+                opcode.stack_defs = m2[2]
 
             merged = opcode
         elif name and not name.startswith('JSOP_UNUSED'):
@@ -236,10 +230,11 @@ def get_opcodes(dir):
             opcode.nuses = m.group(5)
             opcode.ndefs = m.group(6)
 
-            flags = []
-            for flag in m.group(7).split('|'):
-                if flag != 'JOF_BYTE':
-                    flags.append(flag.replace('JOF_', ''))
+            flags = [
+                flag.replace('JOF_', '')
+                for flag in m.group(7).split('|')
+                if flag != 'JOF_BYTE'
+            ]
             opcode.flags = ', '.join(flags)
 
             if merged == opcode:
@@ -279,16 +274,10 @@ def get_opcodes(dir):
     return index
 
 def override(value, override_value):
-    if override_value != '':
-        return override_value
-
-    return value
+    return override_value if override_value != '' else value
 
 def format_flags(flags):
-    if flags == '':
-        return ''
-
-    return ' ({flags})'.format(flags=flags)
+    return '' if flags == '' else ' ({flags})'.format(flags=flags)
 
 def print_opcode(opcode):
     names_template = '{name} [-{nuses}, +{ndefs}]{flags}'

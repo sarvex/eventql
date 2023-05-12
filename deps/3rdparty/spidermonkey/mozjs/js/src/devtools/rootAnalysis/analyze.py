@@ -18,7 +18,7 @@ import re
 
 def env(config):
     e = dict(os.environ)
-    e['PATH'] = '%s:%s' % (e['PATH'], config['sixgill_bin'])
+    e['PATH'] = f"{e['PATH']}:{config['sixgill_bin']}"
     e['XDB'] = '%(sixgill_bin)s/xdb.so' % config
     e['SOURCE'] = config['source']
     e['ANALYZED_OBJDIR'] = config['objdir']
@@ -35,7 +35,9 @@ def fill(command, config):
                 fragment % config
             except:
                 problems.append(fragment)
-        raise Exception("\n".join(["Substitution failed:"] + [ "  %s" % s for s in problems ]))
+        raise Exception(
+            "\n".join(["Substitution failed:"] + [f"  {s}" for s in problems])
+        )
 
 def print_command(command, outfile=None, env=None):
     output = ' '.join(command)
@@ -66,16 +68,21 @@ def print_command(command, outfile=None, env=None):
 def generate_hazards(config, outfilename):
     jobs = []
     for i in range(int(config['jobs'])):
-        command = fill(('%(js)s',
-                        '%(analysis_scriptdir)s/analyzeRoots.js',
-                        '%(gcFunctions_list)s',
-                        '%(gcEdges)s',
-                        '%(suppressedFunctions_list)s',
-                        '%(gcTypes)s',
-                        str(i+1), '%(jobs)s',
-                        'tmp.%s' % (i+1,)),
-                       config)
-        outfile = 'rootingHazards.%s' % (i+1,)
+        command = fill(
+            (
+                '%(js)s',
+                '%(analysis_scriptdir)s/analyzeRoots.js',
+                '%(gcFunctions_list)s',
+                '%(gcEdges)s',
+                '%(suppressedFunctions_list)s',
+                '%(gcTypes)s',
+                str(i + 1),
+                '%(jobs)s',
+                f'tmp.{i + 1}',
+            ),
+            config,
+        )
+        outfile = f'rootingHazards.{i + 1}'
         output = open(outfile, 'w')
         print_command(command, outfile=outfile, env=env(config))
         jobs.append((command, Popen(command, stdout=output, env=env(config))))
@@ -90,7 +97,9 @@ def generate_hazards(config, outfilename):
         raise subprocess.CalledProcessError(final_status, 'analyzeRoots.js')
 
     with open(outfilename, 'w') as output:
-        command = ['cat'] + [ 'rootingHazards.%s' % (i+1,) for i in range(int(config['jobs'])) ]
+        command = ['cat'] + [
+            f'rootingHazards.{i + 1}' for i in range(int(config['jobs']))
+        ]
         print_command(command, outfile=outfilename)
         subprocess.call(command, stdout=output)
 
@@ -135,38 +144,32 @@ JOBS = { 'dbs':
 
 def out_indexes(command):
     for i in range(len(command)):
-        m = re.match(r'^\[(.*)\]$', command[i])
-        if m:
-            yield (i, m.group(1))
+        if m := re.match(r'^\[(.*)\]$', command[i]):
+            yield (i, m[1])
 
 def run_job(name, config):
     cmdspec, outfiles = JOBS[name]
-    print("Running " + name + " to generate " + str(outfiles))
+    print(f"Running {name} to generate {str(outfiles)}")
     if hasattr(cmdspec, '__call__'):
         cmdspec(config, outfiles)
     else:
         temp_map = {}
         cmdspec = fill(cmdspec, config)
         if isinstance(outfiles, basestring):
-            stdout_filename = '%s.tmp' % name
+            stdout_filename = f'{name}.tmp'
             temp_map[stdout_filename] = outfiles
             print_command(cmdspec, outfile=outfiles, env=env(config))
         else:
             stdout_filename = None
             pc = list(cmdspec)
-            outfile = 0
-            for (i, name) in out_indexes(cmdspec):
+            for outfile, (i, name) in enumerate(out_indexes(cmdspec)):
                 pc[i] = outfiles[outfile]
-                outfile += 1
             print_command(pc, env=env(config))
 
         command = list(cmdspec)
-        outfile = 0
-        for (i, name) in out_indexes(cmdspec):
-            command[i] = '%s.tmp' % name
+        for outfile, (i, name) in enumerate(out_indexes(cmdspec)):
+            command[i] = f'{name}.tmp'
             temp_map[command[i]] = outfiles[outfile]
-            outfile += 1
-
         sys.stdout.flush()
         if stdout_filename is None:
             subprocess.check_call(command, env=env(config))
@@ -177,18 +180,20 @@ def run_job(name, config):
             try:
                 os.rename(temp, final)
             except OSError:
-                print("Error renaming %s -> %s" % (temp, final))
+                print(f"Error renaming {temp} -> {final}")
                 raise
 
 config = { 'ANALYSIS_SCRIPTDIR': os.path.dirname(__file__) }
 
-defaults = [ '%s/defaults.py' % config['ANALYSIS_SCRIPTDIR'],
-             '%s/defaults.py' % os.getcwd() ]
+defaults = [
+    f"{config['ANALYSIS_SCRIPTDIR']}/defaults.py",
+    f'{os.getcwd()}/defaults.py',
+]
 
 for default in defaults:
     try:
         execfile(default, config)
-        print("Loaded %s" % default)
+        print(f"Loaded {default}")
     except:
         pass
 
@@ -218,7 +223,7 @@ for k,v in vars(args).items():
         data[k] = v
 
 if args.tag and not args.buildcommand:
-    args.buildcommand="build.%s" % args.tag
+    args.buildcommand = f"build.{args.tag}"
 
 if args.jobs is not None:
     data['jobs'] = args.jobs
@@ -253,7 +258,7 @@ if args.list:
     for step in steps:
         command, outfilename = JOBS[step]
         if outfilename:
-            print("%s -> %s" % (step, outfilename))
+            print(f"{step} -> {outfilename}")
         else:
             print(step)
     sys.exit(0)

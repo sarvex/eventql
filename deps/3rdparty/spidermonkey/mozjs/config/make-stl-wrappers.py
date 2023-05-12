@@ -34,7 +34,7 @@ def main(outdir, compiler, template_file, header_list_file):
 
     for header in open(header_list_file, 'r'):
         header = header.rstrip()
-        if 0 == len(header) or is_comment(header):
+        if len(header) == 0 or is_comment(header):
             continue
 
         path = header_path(header, compiler)
@@ -45,7 +45,7 @@ def main(outdir, compiler, template_file, header_list_file):
 
 
 if __name__ == '__main__':
-    if 5 != len(sys.argv):
+    if len(sys.argv) != 5:
         print("""Usage:
   python {0} OUT_DIR ('msvc'|'gcc') TEMPLATE_FILE HEADER_LIST_FILE
 """.format(sys.argv[0]), file=sys.stderr)

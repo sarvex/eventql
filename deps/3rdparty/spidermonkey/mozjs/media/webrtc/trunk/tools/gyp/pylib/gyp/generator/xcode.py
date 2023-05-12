@@ -33,28 +33,23 @@ _shared_intermediate_var = 'SHARED_INTERMEDIATE_DIR'
 _library_search_paths_var = 'LIBRARY_SEARCH_PATHS'
 
 generator_default_variables = {
-  'EXECUTABLE_PREFIX': '',
-  'EXECUTABLE_SUFFIX': '',
-  'STATIC_LIB_PREFIX': 'lib',
-  'SHARED_LIB_PREFIX': 'lib',
-  'STATIC_LIB_SUFFIX': '.a',
-  'SHARED_LIB_SUFFIX': '.dylib',
-  # INTERMEDIATE_DIR is a place for targets to build up intermediate products.
-  # It is specific to each build environment.  It is only guaranteed to exist
-  # and be constant within the context of a project, corresponding to a single
-  # input file.  Some build environments may allow their intermediate directory
-  # to be shared on a wider scale, but this is not guaranteed.
-  'INTERMEDIATE_DIR': '$(%s)' % _intermediate_var,
-  'OS': 'mac',
-  'PRODUCT_DIR': '$(BUILT_PRODUCTS_DIR)',
-  'LIB_DIR': '$(BUILT_PRODUCTS_DIR)',
-  'RULE_INPUT_ROOT': '$(INPUT_FILE_BASE)',
-  'RULE_INPUT_EXT': '$(INPUT_FILE_SUFFIX)',
-  'RULE_INPUT_NAME': '$(INPUT_FILE_NAME)',
-  'RULE_INPUT_PATH': '$(INPUT_FILE_PATH)',
-  'RULE_INPUT_DIRNAME': '$(INPUT_FILE_DIRNAME)',
-  'SHARED_INTERMEDIATE_DIR': '$(%s)' % _shared_intermediate_var,
-  'CONFIGURATION_NAME': '$(CONFIGURATION)',
+    'EXECUTABLE_PREFIX': '',
+    'EXECUTABLE_SUFFIX': '',
+    'STATIC_LIB_PREFIX': 'lib',
+    'SHARED_LIB_PREFIX': 'lib',
+    'STATIC_LIB_SUFFIX': '.a',
+    'SHARED_LIB_SUFFIX': '.dylib',
+    'INTERMEDIATE_DIR': f'$({_intermediate_var})',
+    'OS': 'mac',
+    'PRODUCT_DIR': '$(BUILT_PRODUCTS_DIR)',
+    'LIB_DIR': '$(BUILT_PRODUCTS_DIR)',
+    'RULE_INPUT_ROOT': '$(INPUT_FILE_BASE)',
+    'RULE_INPUT_EXT': '$(INPUT_FILE_SUFFIX)',
+    'RULE_INPUT_NAME': '$(INPUT_FILE_NAME)',
+    'RULE_INPUT_PATH': '$(INPUT_FILE_PATH)',
+    'RULE_INPUT_DIRNAME': '$(INPUT_FILE_DIRNAME)',
+    'SHARED_INTERMEDIATE_DIR': f'$({_shared_intermediate_var})',
+    'CONFIGURATION_NAME': '$(CONFIGURATION)',
 }
 
 # The Xcode-specific sections that hold paths.
@@ -382,12 +377,14 @@ sys.exit(subprocess.call(sys.argv[1:]))" """
 
           # Directly depend on all the runners as they depend on the target
           # that builds them.
-          if len(all_run_tests) > 0:
-            run_all_target = gyp.xcodeproj_file.PBXAggregateTarget({
-                  'name':        'Run %s Tests' % tgt_name,
-                  'productName': tgt_name,
+          if all_run_tests:
+            run_all_target = gyp.xcodeproj_file.PBXAggregateTarget(
+                {
+                    'name': f'Run {tgt_name} Tests',
+                    'productName': tgt_name
                 },
-                parent=self.project)
+                parent=self.project,
+            )
             for run_test_target in all_run_tests:
               run_all_target.AddDependency(run_test_target)
 
@@ -486,7 +483,7 @@ def InstalledXcodeVersion():
   unable to figure it out."""
 
   global cached_xcode_version
-  if not cached_xcode_version is None:
+  if cached_xcode_version is not None:
     return cached_xcode_version
 
   # Default to an empty string
@@ -505,10 +502,9 @@ def InstalledXcodeVersion():
     # We failed to launch the tool
     xcodebuild_version_info = ''
 
-  # Pull out the Xcode version itself.
-  match_line = re.search('^Xcode (.*)$', xcodebuild_version_info, re.MULTILINE)
-  if match_line:
-    cached_xcode_version = match_line.group(1)
+  if match_line := re.search('^Xcode (.*)$', xcodebuild_version_info,
+                             re.MULTILINE):
+    cached_xcode_version = match_line[1]
   # Done!
   return cached_xcode_version
 
@@ -564,13 +560,13 @@ def ExpandXcodeVariables(string, expansions):
   """
 
   matches = _xcode_variable_re.findall(string)
-  if matches == None:
+  if matches is None:
     return string
 
   matches.reverse()
   for match in matches:
     (to_replace, variable) = match
-    if not variable in expansions:
+    if variable not in expansions:
       continue
 
     replacement = expansions[variable]
@@ -584,7 +580,7 @@ def EscapeXCodeArgument(s):
      split on spaces and to respect backslash and quote literals."""
   s = s.replace('\\', '\\\\')
   s = s.replace('"', '\\"')
-  return '"' + s + '"'
+  return f'"{s}"'
 
 
 

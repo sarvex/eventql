@@ -9,7 +9,7 @@ def normalize_suffix(suffix):
     doesn't starts or ends with whitespace characters'''
     value = suffix.strip()
     if len(value) and not value.startswith('.'):
-        value = '.' + value
+        value = f'.{value}'
     return value
 
 # Variables from the build system

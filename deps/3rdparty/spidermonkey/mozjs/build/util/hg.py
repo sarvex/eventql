@@ -24,7 +24,7 @@ class HgUtilError(Exception):
 def _make_absolute(repo):
     if repo.startswith("file://"):
         path = repo[len("file://"):]
-        repo = "file://%s" % os.path.abspath(path)
+        repo = f"file://{os.path.abspath(path)}"
     elif "://" not in repo:
         repo = os.path.abspath(repo)
     return repo
@@ -34,16 +34,16 @@ def make_hg_url(hgHost, repoPath, protocol='https', revision=None,
                 filename=None):
     """construct a valid hg url from a base hg url (hg.mozilla.org),
     repoPath, revision and possible filename"""
-    base = '%s://%s' % (protocol, hgHost)
+    base = f'{protocol}://{hgHost}'
     repo = '/'.join(p.strip('/') for p in [base, repoPath])
     if not filename:
-        if not revision:
-            return repo
-        else:
-            return '/'.join([p.strip('/') for p in [repo, 'rev', revision]])
-    else:
-        assert revision
-        return '/'.join([p.strip('/') for p in [repo, 'raw-file', revision, filename]])
+        return (
+            repo
+            if not revision
+            else '/'.join([p.strip('/') for p in [repo, 'rev', revision]])
+        )
+    assert revision
+    return '/'.join([p.strip('/') for p in [repo, 'raw-file', revision, filename]])
 
 
 def get_repo_name(repo):
@@ -68,10 +68,10 @@ def get_branch(path):
 
 
 def get_branches(path):
-    branches = []
-    for line in get_output(['hg', 'branches', '-c'], cwd=path).splitlines():
-        branches.append(line.split()[0])
-    return branches
+    return [
+        line.split()[0]
+        for line in get_output(['hg', 'branches', '-c'], cwd=path).splitlines()
+    ]
 
 
 def is_hg_cset(rev):
@@ -88,9 +88,8 @@ def hg_ver():
     """Returns the current version of hg, as a tuple of
     (major, minor, build)"""
     ver_string = get_output(['hg', '-q', 'version'])
-    match = re.search("\(version ([0-9.]+)\)", ver_string)
-    if match:
-        bits = match.group(1).split(".")
+    if match := re.search("\(version ([0-9.]+)\)", ver_string):
+        bits = match[1].split(".")
         if len(bits) < 3:
             bits += (0,)
         ver = tuple(int(b) for b in bits)
@@ -117,7 +116,6 @@ def update(dest, branch=None, revision=None):
     # If we have a revision, switch to that
     if revision is not None:
         cmd = ['hg', 'update', '-C', '-r', revision]
-        run_cmd(cmd, cwd=dest)
     else:
         # Check & switch branch
         local_branch = get_output(['hg', 'branch'], cwd=dest).strip()
@@ -128,7 +126,7 @@ def update(dest, branch=None, revision=None):
         if branch and branch != local_branch:
             cmd.append(branch)
 
-        run_cmd(cmd, cwd=dest)
+    run_cmd(cmd, cwd=dest)
     return get_revision(dest)
 
 
@@ -227,9 +225,9 @@ def common_args(revision=None, branch=None, ssh_username=None, ssh_key=None):
     if ssh_username or ssh_key:
         opt = ['-e', 'ssh']
         if ssh_username:
-            opt[1] += ' -l %s' % ssh_username
+            opt[1] += f' -l {ssh_username}'
         if ssh_key:
-            opt[1] += ' -i %s' % ssh_key
+            opt[1] += f' -i {ssh_key}'
         args.extend(opt)
     if revision:
         args.extend(['-r', revision])
@@ -276,9 +274,7 @@ def pull(repo, dest, update_dest=True, mirrors=None, **kwargs):
     run_cmd(cmd, cwd=dest)
 
     if update_dest:
-        branch = None
-        if 'branch' in kwargs and kwargs['branch']:
-            branch = kwargs['branch']
+        branch = kwargs['branch'] if 'branch' in kwargs and kwargs['branch'] else None
         revision = None
         if 'revision' in kwargs and kwargs['revision']:
             revision = kwargs['revision']

@@ -54,13 +54,12 @@ class FileRecord(object):
     def __eq__(self, other):
         if self is other:
             return True
-        if self.filename == other.filename and \
-            self.size == other.size and \
-            self.digest == other.digest and \
-            self.algorithm == other.algorithm:
-            return True
-        else:
-            return False
+        return (
+            self.filename == other.filename
+            and self.size == other.size
+            and self.digest == other.digest
+            and self.algorithm == other.algorithm
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -69,9 +68,7 @@ class FileRecord(object):
         return repr(self)
 
     def __repr__(self):
-        return "%s.%s(filename='%s', size='%s', digest='%s', algorithm='%s')" % (__name__,
-                self.__class__.__name__,
-                self.filename, self.size, self.digest, self.algorithm)
+        return f"{__name__}.{self.__class__.__name__}(filename='{self.filename}', size='{self.size}', digest='{self.digest}', algorithm='{self.algorithm}')"
 
     def present(self):
         # Doesn't check validity
@@ -80,9 +77,8 @@ class FileRecord(object):
     def validate_size(self):
         if self.present():
             return self.size == os.path.getsize(self.filename)
-        else:
-            log.debug("trying to validate size on a missing file, %s", self.filename)
-            raise MissingFileException(filename=self.filename)
+        log.debug("trying to validate size on a missing file, %s", self.filename)
+        raise MissingFileException(filename=self.filename)
 
     def validate_digest(self):
         if self.present():
@@ -93,43 +89,35 @@ class FileRecord(object):
             raise MissingFileException(filename=self.filename)
 
     def validate(self):
-        if self.validate_size():
-            if self.validate_digest():
-                return True
-        return False
+        return bool(self.validate_size() and self.validate_digest())
 
     def describe(self):
         if self.present() and self.validate():
-            return "'%s' is present and valid" % self.filename
+            return f"'{self.filename}' is present and valid"
         elif self.present():
-            return "'%s' is present and invalid" % self.filename
+            return f"'{self.filename}' is present and invalid"
         else:
-            return "'%s' is absent" % self.filename
+            return f"'{self.filename}' is absent"
 
 
 def create_file_record(filename, algorithm):
-    fo = open(filename, 'rb')
-    stored_filename = os.path.split(filename)[1]
-    fr = FileRecord(stored_filename, os.path.getsize(filename), digest_file(fo, algorithm), algorithm)
-    fo.close()
+    with open(filename, 'rb') as fo:
+        stored_filename = os.path.split(filename)[1]
+        fr = FileRecord(stored_filename, os.path.getsize(filename), digest_file(fo, algorithm), algorithm)
     return fr
 
 
 class FileRecordJSONEncoder(json.JSONEncoder):
     def encode_file_record(self, obj):
-        if not issubclass(type(obj), FileRecord):
-            err = "FileRecordJSONEncoder is only for FileRecord and lists of FileRecords, not %s" % obj.__class__.__name__
-            log.warn(err)
-            raise FileRecordJSONEncoderException(err)
-        else:
+        if issubclass(type(obj), FileRecord):
             return {'filename': obj.filename, 'size': obj.size, 'algorithm': obj.algorithm, 'digest': obj.digest}
+        err = f"FileRecordJSONEncoder is only for FileRecord and lists of FileRecords, not {obj.__class__.__name__}"
+        log.warn(err)
+        raise FileRecordJSONEncoderException(err)
 
     def default(self, f):
         if issubclass(type(f), list):
-            record_list = []
-            for i in f:
-                record_list.append(self.encode_file_record(i))
-            return record_list
+            return [self.encode_file_record(i) for i in f]
         else:
             return self.encode_file_record(f)
 
@@ -149,20 +137,19 @@ class FileRecordJSONDecoder(json.JSONDecoder):
                     record_list.append(record)
             return record_list
         if isinstance(obj, dict) and \
-           len(obj.keys()) == 4 and \
-           obj.has_key('filename') and \
-           obj.has_key('size') and \
-           obj.has_key('algorithm') and \
-           obj.has_key('digest'):
+               len(obj.keys()) == 4 and \
+               obj.has_key('filename') and \
+               obj.has_key('size') and \
+               obj.has_key('algorithm') and \
+               obj.has_key('digest'):
             rv = FileRecord(obj['filename'], obj['size'], obj['digest'], obj['algorithm'])
-            log.debug("materialized %s" % rv)
+            log.debug(f"materialized {rv}")
             return rv
         return obj
 
     def decode(self, s):
         decoded = json.JSONDecoder.decode(self, s)
-        rv = self.process_file_records(decoded)
-        return rv
+        return self.process_file_records(decoded)
 
 
 class Manifest(object):
@@ -181,8 +168,9 @@ class Manifest(object):
         #TODO: Lists in a different order should be equal
         for record in range(0,len(self.file_records)):
             if self.file_records[record] != other.file_records[record]:
-                log.debug('FileRecords differ, %s vs %s' % (self.file_records[record],
-                                                            other.file_records[record]))
+                log.debug(
+                    f'FileRecords differ, {self.file_records[record]} vs {other.file_records[record]}'
+                )
                 return False
         return True
 
@@ -250,10 +238,8 @@ def digest_file(f, a):
     of the result of the algorithm 'a' applied to 'f'."""
     h = hashlib.new(a)
     chunk_size = 1024*10
-    data = f.read(chunk_size)
-    while data:
+    while data := f.read(chunk_size):
         h.update(data)
-        data = f.read(chunk_size)
     if hasattr(f, 'name'):
         log.debug('hashed %s with %s to be %s', f.name, a, h.hexdigest())
     else:
@@ -267,11 +253,11 @@ def open_manifest(manifest_file):
         manifest = Manifest()
         with open(manifest_file) as f:
             manifest.load(f)
-            log.debug("loaded manifest from file '%s'" % manifest_file)
+            log.debug(f"loaded manifest from file '{manifest_file}'")
         return manifest
     else:
-        log.debug("tried to load absent file '%s' as manifest" % manifest_file)
-        raise InvalidManifest("manifest file '%s' does not exist" % manifest_file)
+        log.debug(f"tried to load absent file '{manifest_file}' as manifest")
+        raise InvalidManifest(f"manifest file '{manifest_file}' does not exist")
 
 # TODO: write tests for this function
 def list_manifest(manifest_file):
@@ -293,20 +279,16 @@ def validate_manifest(manifest_file):
     try:
         manifest = open_manifest(manifest_file)
     except InvalidManifest:
-        log.error("failed to load manifest file at '%s'" % manifest_file)
+        log.error(f"failed to load manifest file at '{manifest_file}'")
         return False
     invalid_files = []
     absent_files = []
     for f in manifest.file_records:
         if not f.present():
             absent_files.append(f)
-        else:
-            if not f.validate():
-                invalid_files.append(f)
-    if len(invalid_files + absent_files) == 0:
-        return True
-    else:
-        return False
+        elif not f.validate():
+            invalid_files.append(f)
+    return len(invalid_files + absent_files) == 0
 
 # TODO: write tests for this function
 def add_files(manifest_file, algorithm, filenames):
@@ -323,13 +305,15 @@ def add_files(manifest_file, algorithm, filenames):
         log.debug("creating a new manifest file")
     new_manifest = Manifest() # use a different manifest for the output
     for filename in filenames:
-        log.debug("adding %s" % filename)
+        log.debug(f"adding {filename}")
         path, name = os.path.split(filename)
         new_fr = create_file_record(filename, algorithm)
         log.debug("appending a new file record to manifest file")
         add = True
         for fr in old_manifest.file_records:
-            log.debug("manifest file has '%s'" % "', ".join([x.filename for x in old_manifest.file_records]))
+            log.debug(
+                f"""manifest file has '{"', ".join([x.filename for x in old_manifest.file_records])}'"""
+            )
             if new_fr == fr and new_fr.validate():
                 # TODO: Decide if this case should really cause a False return
                 log.info("file already in old_manifest file and matches")
@@ -338,11 +322,11 @@ def add_files(manifest_file, algorithm, filenames):
                 log.error("file already in old_manifest file but is invalid")
                 add = False
             if filename == fr.filename:
-                log.error("manifest already contains file named %s" % filename)
+                log.error(f"manifest already contains file named {filename}")
                 add = False
         if add:
             new_manifest.file_records.append(new_fr)
-            log.debug("added '%s' to manifest" % filename)
+            log.debug(f"added '{filename}' to manifest")
         else:
             all_files_added = False
     with open(manifest_file, 'wb') as output:
@@ -358,30 +342,31 @@ def fetch_file(base_url, file_record, overwrite=False, grabchunk=1024*4):
     # digest mismatch, the exiting file will be overwritten
     if file_record.present():
         if file_record.validate():
-            log.info("existing '%s' is valid, not fetching" % file_record.filename)
+            log.info(f"existing '{file_record.filename}' is valid, not fetching")
             return True
         if overwrite:
-            log.info("overwriting '%s' as requested" % file_record.filename)
+            log.info(f"overwriting '{file_record.filename}' as requested")
         else:
             # All of the following is for a useful error message
             with open(file_record.filename, 'rb') as f:
                 d = digest_file(f, file_record.algorithm)
-            log.error("digest mismatch between manifest(%s...) and local file(%s...)" % \
-                    (file_record.digest[:8], d[:8]))
-            log.debug("full digests: manifest (%s) local file (%s)" % (file_record.digest, d))
+            log.error(
+                f"digest mismatch between manifest({file_record.digest[:8]}...) and local file({d[:8]}...)"
+            )
+            log.debug(f"full digests: manifest ({file_record.digest}) local file ({d})")
             # Let's bail!
             return False
 
     # Generate the URL for the file on the server side
-    url = "%s/%s/%s" % (base_url, file_record.algorithm, file_record.digest)
+    url = f"{base_url}/{file_record.algorithm}/{file_record.digest}"
 
-    log.debug("fetching from '%s'" % url)
+    log.debug(f"fetching from '{url}'")
 
     # TODO: This should be abstracted to make generic retreival protocol handling easy
     # Well, the file doesn't exist locally.  Lets fetch it.
     try:
         f = urllib2.urlopen(url)
-        log.debug("opened %s for reading" % url)
+        log.debug(f"opened {url} for reading")
         with open(file_record.filename, 'wb') as out:
             k = True
             size = 0
@@ -397,14 +382,12 @@ def fetch_file(base_url, file_record, overwrite=False, grabchunk=1024*4):
                 log.error("transfer from %s to %s failed due to a difference of %d bytes" % (url,
                             file_record.filename, file_record.size - size))
                 return False
-            log.info("fetched %s" % file_record.filename)
+            log.info(f"fetched {file_record.filename}")
     except (urllib2.URLError, urllib2.HTTPError) as e:
-        log.error("failed to fetch '%s': %s" % (file_record.filename, e),
-                  exc_info=True)
+        log.error(f"failed to fetch '{file_record.filename}': {e}", exc_info=True)
         return False
     except IOError:
-        log.error("failed to write to '%s'" % file_record.filename,
-                  exc_info=True)
+        log.error(f"failed to write to '{file_record.filename}'", exc_info=True)
         return False
     return True
 
@@ -415,7 +398,7 @@ def fetch_files(manifest_file, base_url, overwrite, filenames=[]):
     try:
         manifest = open_manifest(manifest_file)
     except InvalidManifest:
-        log.error("failed to load manifest file at '%s'" % manifest_file)
+        log.error(f"failed to load manifest file at '{manifest_file}'")
         return False
     # We want to track files that fail to be fetched as well as
     # files that are fetched
@@ -425,23 +408,23 @@ def fetch_files(manifest_file, base_url, overwrite, filenames=[]):
     fetched_files = []
     for f in manifest.file_records:
         if f.filename in filenames or len(filenames) == 0:
-            log.debug("fetching %s" % f.filename)
+            log.debug(f"fetching {f.filename}")
             if fetch_file(base_url, f, overwrite):
                 fetched_files.append(f)
             else:
                 failed_files.append(f.filename)
         else:
-            log.debug("skipping %s" % f.filename)
+            log.debug(f"skipping {f.filename}")
 
     # Even if we get the file, lets ensure that it matches what the
     # manifest specified
     for localfile in fetched_files:
         if not localfile.validate():
-            log.error("'%s'" % localfile.describe())
+            log.error(f"'{localfile.describe()}'")
 
     # If we failed to fetch or validate a file, we need to fail
-    if len(failed_files) > 0:
-        log.error("The following files failed: '%s'" % "', ".join(failed_files))
+    if failed_files:
+        log.error(f"""The following files failed: '{"', ".join(failed_files)}'""")
         return False
     return True
 
@@ -452,8 +435,10 @@ def process_command(options, args):
     start doing the right thing with them"""
     cmd = args[0]
     cmd_args = args[1:]
-    log.debug("processing '%s' command with args '%s'" % (cmd, '", "'.join(cmd_args)))
-    log.debug("using options: %s" % options)
+    log.debug(
+        f"""processing '{cmd}' command with args '{'", "'.join(cmd_args)}'"""
+    )
+    log.debug(f"using options: {options}")
     if cmd == 'list':
         return list_manifest(options['manifest'])
     if cmd == 'validate':
@@ -466,7 +451,7 @@ def process_command(options, args):
             return False
         return fetch_files(options['manifest'], options['base_url'], options['overwrite'], cmd_args)
     else:
-        log.critical('command "%s" is not implemented' % cmd)
+        log.critical(f'command "{cmd}" is not implemented')
         return False
 
 # fetching api:
@@ -535,7 +520,7 @@ def main():
     if not options.get("ignore_cfg_files"):
         read_files = cfg_file.read(['/etc/tooltool', os.path.expanduser('~/.tooltool'),
                    os.path.join(os.getcwd(), '.tooltool')])
-        log.debug("read in the config files '%s'" % '", '.join(read_files))
+        log.debug(f"""read in the config files '{'", '.join(read_files)}'""")
     else:
         log.debug("skipping config files")
 
@@ -543,9 +528,9 @@ def main():
         if not options.get(option):
             try:
                 options[option] = cfg_file.get('general', option)
-                log.debug("read '%s' as '%s' from cfg_file" % (option, options[option]))
+                log.debug(f"read '{option}' as '{options[option]}' from cfg_file")
             except (ConfigParser.NoSectionError, ConfigParser.NoOptionError) as e:
-                log.debug("%s in config file" % e, exc_info=True)
+                log.debug(f"{e} in config file", exc_info=True)
 
     if not options.has_key('manifest'):
         parser.error("no manifest file specified")

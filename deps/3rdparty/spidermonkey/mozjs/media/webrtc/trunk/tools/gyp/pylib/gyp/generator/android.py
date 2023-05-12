@@ -65,10 +65,8 @@ header = """\
 
 """
 
-android_standard_include_paths = set([
-    # JNI_H_INCLUDE in build/core/binary.mk
+android_standard_include_paths = {
     'dalvik/libnativehelper/include/nativehelper',
-    # from SRC_HEADERS in build/core/config.mk
     'system/core/include',
     'hardware/libhardware/include',
     'hardware/libhardware_legacy/include',
@@ -80,7 +78,6 @@ android_standard_include_paths = set([
     'frameworks/base/opengl/include',
     'frameworks/base/native/include',
     'external/skia/include',
-    # TARGET_C_INCLUDES in build/core/combo/TARGET_linux-arm.mk
     'bionic/libc/arch-arm/include',
     'bionic/libc/include',
     'bionic/libstdc++/include',
@@ -89,7 +86,7 @@ android_standard_include_paths = set([
     'bionic/libm/include',
     'bionic/libm/include/arm',
     'bionic/libthread_db/include',
-    ])
+}
 
 
 # Map gyp target types to Android module classes.
@@ -172,14 +169,14 @@ class AndroidMkWriter(object):
     self.WriteLn('include $(CLEAR_VARS)\n')
 
     # Module class and name.
-    self.WriteLn('LOCAL_MODULE_CLASS := ' + self.android_class)
-    self.WriteLn('LOCAL_MODULE := ' + self.android_module)
+    self.WriteLn(f'LOCAL_MODULE_CLASS := {self.android_class}')
+    self.WriteLn(f'LOCAL_MODULE := {self.android_module}')
     # Only emit LOCAL_MODULE_STEM if it's different to LOCAL_MODULE.
     # The library module classes fail if the stem is set. ComputeOutputParts
     # makes sure that stem == modulename in these cases.
     if self.android_stem != self.android_module:
-      self.WriteLn('LOCAL_MODULE_STEM := ' + self.android_stem)
-    self.WriteLn('LOCAL_MODULE_SUFFIX := ' + self.android_suffix)
+      self.WriteLn(f'LOCAL_MODULE_STEM := {self.android_stem}')
+    self.WriteLn(f'LOCAL_MODULE_SUFFIX := {self.android_suffix}')
     self.WriteLn('LOCAL_MODULE_TAGS := optional')
     if self.toolset == 'host':
       self.WriteLn('LOCAL_IS_HOST_MODULE := true')
@@ -248,21 +245,20 @@ class AndroidMkWriter(object):
                    actions)
     """
     for action in actions:
-      name = make.StringToMakefileVariable('%s_%s' % (self.qualified_target,
-                                                      action['action_name']))
-      self.WriteLn('### Rules for action "%s":' % action['action_name'])
+      name = make.StringToMakefileVariable(
+          f"{self.qualified_target}_{action['action_name']}")
+      self.WriteLn(f"""### Rules for action "{action['action_name']}":""")
       inputs = action['inputs']
-      outputs = action['outputs']
-
       # Build up a list of outputs.
       # Collect the output dirs we'll need.
       dirs = set()
+      outputs = action['outputs']
       for out in outputs:
         if not out.startswith('$'):
-          print ('WARNING: Action for target "%s" writes output to local path '
-                 '"%s".' % (self.target, out))
-        dir = os.path.split(out)[0]
-        if dir:
+          print(
+              f'WARNING: Action for target "{self.target}" writes output to local path "{out}".'
+          )
+        if dir := os.path.split(out)[0]:
           dirs.add(dir)
       if int(action.get('process_outputs_as_sources', False)):
         extra_sources += outputs
@@ -270,13 +266,13 @@ class AndroidMkWriter(object):
       # Prepare the actual command.
       command = gyp.common.EncodePOSIXShellList(action['action'])
       if 'message' in action:
-        quiet_cmd = 'Gyp action: %s ($@)' % action['message']
+        quiet_cmd = f"Gyp action: {action['message']} ($@)"
       else:
-        quiet_cmd = 'Gyp action: %s ($@)' % name
-      if len(dirs) > 0:
-        command = 'mkdir -p %s' % ' '.join(dirs) + '; ' + command
+        quiet_cmd = f'Gyp action: {name} ($@)'
+      if dirs:
+        command = f"mkdir -p {' '.join(dirs)}; {command}"
 
-      cd_action = 'cd $(gyp_local_path)/%s; ' % self.path
+      cd_action = f'cd $(gyp_local_path)/{self.path}; '
       command = cd_action + command
 
       # The makefile rules are all relative to the top dir, but the gyp actions
@@ -287,29 +283,30 @@ class AndroidMkWriter(object):
       # it's superfluous for the "extra outputs", and this avoids accidentally
       # writing duplicate dummy rules for those outputs.
       main_output = make.QuoteSpaces(self.LocalPathify(outputs[0]))
-      self.WriteLn('%s: gyp_local_path := $(LOCAL_PATH)' % main_output)
-      self.WriteLn('%s: gyp_intermediate_dir := '
-                   '$(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_intermediate_dir)' %
-                   main_output)
-      self.WriteLn('%s: gyp_shared_intermediate_dir := '
-                   '$(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_shared_intermediate_dir)' %
-                   main_output)
+      self.WriteLn(f'{main_output}: gyp_local_path := $(LOCAL_PATH)')
+      self.WriteLn(
+          f'{main_output}: gyp_intermediate_dir := $(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_intermediate_dir)'
+      )
+      self.WriteLn(
+          f'{main_output}: gyp_shared_intermediate_dir := $(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_shared_intermediate_dir)'
+      )
 
       for input in inputs:
-        assert ' ' not in input, (
-            "Spaces in action input filenames not supported (%s)"  % input)
+        assert (' ' not in input
+                ), f"Spaces in action input filenames not supported ({input})"
       for output in outputs:
-        assert ' ' not in output, (
-            "Spaces in action output filenames not supported (%s)"  % output)
+        assert (' ' not in output
+                ), f"Spaces in action output filenames not supported ({output})"
 
-      self.WriteLn('%s: %s $(GYP_TARGET_DEPENDENCIES)' %
-                   (main_output, ' '.join(map(self.LocalPathify, inputs))))
+      self.WriteLn(
+          f"{main_output}: {' '.join(map(self.LocalPathify, inputs))} $(GYP_TARGET_DEPENDENCIES)"
+      )
       self.WriteLn('\t@echo "%s"' % quiet_cmd)
       self.WriteLn('\t$(hide)%s\n' % command)
       for output in outputs[1:]:
         # Make each output depend on the main output, with an empty command
         # to force make to notice that the mtime has changed.
-        self.WriteLn('%s: %s ;' % (self.LocalPathify(output), main_output))
+        self.WriteLn(f'{self.LocalPathify(output)}: {main_output} ;')
 
       extra_outputs += outputs
       self.WriteLn()
@@ -327,23 +324,22 @@ class AndroidMkWriter(object):
     """
     if len(rules) == 0:
       return
-    rule_trigger = '%s_rule_trigger' % self.android_module
-
     did_write_rule = False
+    rule_trigger = f'{self.android_module}_rule_trigger'
     for rule in rules:
       if len(rule.get('rule_sources', [])) == 0:
         continue
       did_write_rule = True
-      name = make.StringToMakefileVariable('%s_%s' % (self.qualified_target,
-                                                      rule['rule_name']))
+      name = make.StringToMakefileVariable(
+          f"{self.qualified_target}_{rule['rule_name']}")
       self.WriteLn('\n### Generated for rule "%s":' % name)
-      self.WriteLn('# "%s":' % rule)
+      self.WriteLn(f'# "{rule}":')
 
       inputs = rule.get('inputs')
       for rule_source in rule.get('rule_sources', []):
         (rule_source_dirname, rule_source_basename) = os.path.split(rule_source)
         (rule_source_root, rule_source_ext) = \
-            os.path.splitext(rule_source_basename)
+              os.path.splitext(rule_source_basename)
 
         outputs = [self.ExpandInputRoot(out, rule_source_root,
                                         rule_source_dirname)
@@ -352,10 +348,10 @@ class AndroidMkWriter(object):
         dirs = set()
         for out in outputs:
           if not out.startswith('$'):
-            print ('WARNING: Rule for target %s writes output to local path %s'
-                   % (self.target, out))
-          dir = os.path.dirname(out)
-          if dir:
+            print(
+                f'WARNING: Rule for target {self.target} writes output to local path {out}'
+            )
+          if dir := os.path.dirname(out):
             dirs.add(dir)
         extra_outputs += outputs
         if int(rule.get('process_outputs_as_sources', False)):
@@ -371,35 +367,34 @@ class AndroidMkWriter(object):
           components.append(component)
 
         command = gyp.common.EncodePOSIXShellList(components)
-        cd_action = 'cd $(gyp_local_path)/%s; ' % self.path
+        cd_action = f'cd $(gyp_local_path)/{self.path}; '
         command = cd_action + command
         if dirs:
-          command = 'mkdir -p %s' % ' '.join(dirs) + '; ' + command
+          command = f"mkdir -p {' '.join(dirs)}; {command}"
 
         # We set up a rule to build the first output, and then set up
         # a rule for each additional output to depend on the first.
         outputs = map(self.LocalPathify, outputs)
         main_output = outputs[0]
-        self.WriteLn('%s: gyp_local_path := $(LOCAL_PATH)' % main_output)
-        self.WriteLn('%s: gyp_intermediate_dir := '
-                     '$(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_intermediate_dir)'
-                     % main_output)
-        self.WriteLn('%s: gyp_shared_intermediate_dir := '
-                     '$(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_shared_intermediate_dir)'
-                     % main_output)
+        self.WriteLn(f'{main_output}: gyp_local_path := $(LOCAL_PATH)')
+        self.WriteLn(
+            f'{main_output}: gyp_intermediate_dir := $(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_intermediate_dir)'
+        )
+        self.WriteLn(
+            f'{main_output}: gyp_shared_intermediate_dir := $(GYP_ABS_ANDROID_TOP_DIR)/$(gyp_shared_intermediate_dir)'
+        )
 
         main_output_deps = self.LocalPathify(rule_source)
         if inputs:
           main_output_deps += ' '
           main_output_deps += ' '.join([self.LocalPathify(f) for f in inputs])
 
-        self.WriteLn('%s: %s $(GYP_TARGET_DEPENDENCIES)' %
-                     (main_output, main_output_deps))
+        self.WriteLn(f'{main_output}: {main_output_deps} $(GYP_TARGET_DEPENDENCIES)')
         self.WriteLn('\t%s\n' % command)
         for output in outputs[1:]:
-          self.WriteLn('%s: %s' % (output, main_output))
-        self.WriteLn('.PHONY: %s' % (rule_trigger))
-        self.WriteLn('%s: %s' % (rule_trigger, main_output))
+          self.WriteLn(f'{output}: {main_output}')
+        self.WriteLn(f'.PHONY: {rule_trigger}')
+        self.WriteLn(f'{rule_trigger}: {main_output}')
         self.WriteLn('')
     if did_write_rule:
       extra_sources.append(rule_trigger)  # Force all rules to run.
@@ -415,7 +410,7 @@ class AndroidMkWriter(object):
     """
     self.WriteLn('### Generated for copy rule.')
 
-    variable = make.StringToMakefileVariable(self.qualified_target + '_copies')
+    variable = make.StringToMakefileVariable(f'{self.qualified_target}_copies')
     outputs = []
     for copy in copies:
       for path in copy['files']:
@@ -434,16 +429,14 @@ class AndroidMkWriter(object):
         output = Sourceify(self.LocalPathify(os.path.join(copy['destination'],
                                                           filename)))
 
-        self.WriteLn('%s: %s $(GYP_TARGET_DEPENDENCIES) | $(ACP)' %
-                     (output, path))
+        self.WriteLn(f'{output}: {path} $(GYP_TARGET_DEPENDENCIES) | $(ACP)')
         self.WriteLn('\t@echo Copying: $@')
         self.WriteLn('\t$(hide) mkdir -p $(dir $@)')
         self.WriteLn('\t$(hide) $(ACP) -r $< $@')
         self.WriteLn()
         outputs.append(output)
-    self.WriteLn('%s = %s' % (variable,
-                              ' '.join(map(make.QuoteSpaces, outputs))))
-    extra_outputs.append('$(%s)' % variable)
+    self.WriteLn(f"{variable} = {' '.join(map(make.QuoteSpaces, outputs))}")
+    extra_outputs.append(f'$({variable})')
     self.WriteLn()
 
 

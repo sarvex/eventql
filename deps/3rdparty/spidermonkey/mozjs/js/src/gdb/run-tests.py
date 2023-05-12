@@ -29,9 +29,7 @@ def _relpath(path, start=None):
     i = len(os.path.commonprefix([start_list, path_list]))
 
     rel_list = [os.pardir] * (len(start_list)-i) + path_list[i:]
-    if not rel_list:
-        return os.curdir
-    return os.path.join(*rel_list)
+    return os.curdir if not rel_list else os.path.join(*rel_list)
 
 os.path.relpath = _relpath
 
@@ -43,7 +41,7 @@ def make_shell_cmd(l):
     def quote(s):
         if shell_need_escapes.search(s):
             if s.find("'") < 0:
-                return "'" + s + "'"
+                return f"'{s}'"
             return '"' + shell_dquote_escapes.sub('\\g<0>', s) + '"'
         return s
 
@@ -153,15 +151,23 @@ class Test(TaskPool.Task):
 
     def cmd(self):
         testlibdir = os.path.normpath(os.path.join(OPTIONS.testdir, '..', 'lib-for-tests'))
-        return [OPTIONS.gdb_executable,
-                '-nw',          # Don't create a window (unnecessary?)
-                '-nx',          # Don't read .gdbinit.
-                '--ex', 'add-auto-load-safe-path %s' % (OPTIONS.builddir,),
-                '--ex', 'set env LD_LIBRARY_PATH %s' % (OPTIONS.libdir,),
-                '--ex', 'file %s' % (os.path.join(OPTIONS.builddir, 'gdb-tests'),),
-                '--eval-command', 'python testlibdir=%r' % (testlibdir,),
-                '--eval-command', 'python testscript=%r' % (self.test_path,),
-                '--eval-command', 'python execfile(%r)' % os.path.join(testlibdir, 'catcher.py')]
+        return [
+            OPTIONS.gdb_executable,
+            '-nw',
+            '-nx',
+            '--ex',
+            f'add-auto-load-safe-path {OPTIONS.builddir}',
+            '--ex',
+            f'set env LD_LIBRARY_PATH {OPTIONS.libdir}',
+            '--ex',
+            f"file {os.path.join(OPTIONS.builddir, 'gdb-tests')}",
+            '--eval-command',
+            'python testlibdir=%r' % (testlibdir,),
+            '--eval-command',
+            'python testscript=%r' % (self.test_path,),
+            '--eval-command',
+            'python execfile(%r)' % os.path.join(testlibdir, 'catcher.py'),
+        ]
 
     def start(self, pipe, deadline):
         super(Test, self).start(pipe, deadline)

@@ -59,9 +59,7 @@ def relativize(path):
     if not curdir and not abspath:
         return '.'
     relpath = os.path.join(*[os.pardir for i in curdir] + abspath)
-    if len(path) > len(relpath):
-        return relpath
-    return path
+    return relpath if len(path) > len(relpath) else path
 
 def isObject(path):
     '''Returns whether the given path points to an object file, that is,
@@ -82,7 +80,9 @@ class LibDescriptor(dict):
         '''Creates an instance of a lib descriptor, initialized with contents
         from a list of strings when given. This is intended for use with
         file.readlines()'''
-        if isinstance(content, list) and all([isinstance(item, str) for item in content]):
+        if isinstance(content, list) and all(
+            isinstance(item, str) for item in content
+        ):
             pass
         elif content is not None:
             raise TypeError("LibDescriptor() arg 1 must be None or a list of strings")
@@ -97,7 +97,9 @@ class LibDescriptor(dict):
 
     def __str__(self):
         '''Serializes the lib descriptor'''
-        return '\n'.join('%s = %s' % (k, ' '.join(self[k])) for k in self.KEYS if len(self[k]))
+        return '\n'.join(
+            f"{k} = {' '.join(self[k])}" for k in self.KEYS if len(self[k])
+        )
 
 class ExpandArgs(list):
     def __init__(self, args):

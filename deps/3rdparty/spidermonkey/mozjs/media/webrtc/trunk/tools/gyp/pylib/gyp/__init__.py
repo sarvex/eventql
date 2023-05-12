@@ -38,11 +38,7 @@ def DebugOutput(mode, message):
 def FindBuildFiles():
   extension = '.gyp'
   files = os.listdir(os.getcwd())
-  build_files = []
-  for file in files:
-    if file.endswith(extension):
-      build_files.append(file)
-  return build_files
+  return [file for file in files if file.endswith(extension)]
 
 
 def Load(build_files, format, default_variables={},
@@ -85,7 +81,7 @@ def Load(build_files, format, default_variables={},
     if path not in sys.path:
       sys.path.insert(0, path)
   else:
-    generator_name = 'gyp.generator.' + format
+    generator_name = f'gyp.generator.{format}'
 
   # These parameters are passed in order (as opposed to by key)
   # because ActivePython cannot handle key parameters to __import__.
@@ -161,9 +157,7 @@ def ShlexEnv(env_name):
   return flags
 
 def FormatOpt(opt, value):
-  if opt.startswith('--'):
-    return '%s=%s' % (opt, value)
-  return opt + value
+  return f'{opt}={value}' if opt.startswith('--') else opt + value
 
 def RegenerateAppendFlag(flag, values, predicate, env_name, options):
   """Regenerate a list of command line flags, for an option of action='append'.
@@ -183,8 +177,7 @@ def RegenerateAppendFlag(flag, values, predicate, env_name, options):
         flags.remove(value)
       flags.append(value)
   if values:
-    for flag_value in values:
-      flags.append(FormatOpt(flag, predicate(flag_value)))
+    flags.extend(FormatOpt(flag, predicate(flag_value)) for flag_value in values)
   return flags
 
 def RegenerateFlags(options):

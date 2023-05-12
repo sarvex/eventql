@@ -182,12 +182,11 @@ class B2GRemoteAutomation(Automation):
         status = 'unknown'
 
         for line in self._devicemanager._runCmd(['devices']).stdout.readlines():
-            result = re.match('(.*?)\t(.*)', line)
-            if result:
-                thisSerial = result.group(1)
+            if result := re.match('(.*?)\t(.*)', line):
+                thisSerial = result[1]
                 if not serial or thisSerial == serial:
                     serial = thisSerial
-                    status = result.group(2)
+                    status = result[2]
 
         return (serial, status)
 
@@ -262,9 +261,13 @@ class B2GRemoteAutomation(Automation):
         # Set up port forwarding again for Marionette, since any that
         # existed previously got wiped out by the reboot.
         if not self._is_emulator:
-            self._devicemanager._checkCmd(['forward',
-                                           'tcp:%s' % self.marionette.port,
-                                           'tcp:%s' % self.marionette.port])
+            self._devicemanager._checkCmd(
+                [
+                    'forward',
+                    f'tcp:{self.marionette.port}',
+                    f'tcp:{self.marionette.port}',
+                ]
+            )
 
         if self._is_emulator:
             self.marionette.emulator.wait_for_port(self.marionette.port)
@@ -274,7 +277,7 @@ class B2GRemoteAutomation(Automation):
         # start a marionette session
         session = self.marionette.start_session()
         if 'b2g' not in session:
-            raise Exception("bad session value %s returned by start_session" % session)
+            raise Exception(f"bad session value {session} returned by start_session")
 
         if self.context_chrome:
             self.marionette.set_context(self.marionette.CONTEXT_CHROME)
@@ -284,15 +287,10 @@ class B2GRemoteAutomation(Automation):
         # run the script that starts the tests
         if self.test_script:
             if os.path.isfile(self.test_script):
-                script = open(self.test_script, 'r')
-                self.marionette.execute_script(script.read(), script_args=self.test_script_args)
-                script.close()
+                with open(self.test_script, 'r') as script:
+                    self.marionette.execute_script(script.read(), script_args=self.test_script_args)
             elif isinstance(self.test_script, basestring):
                 self.marionette.execute_script(self.test_script, script_args=self.test_script_args)
-        else:
-            # assumes the tests are started on startup automatically
-            pass
-
         return instance
 
     # be careful here as this inner class doesn't have access to outer class members
@@ -316,8 +314,7 @@ class B2GRemoteAutomation(Automation):
             if self.dm._deviceSerial:
                 cmd.extend(['-s', self.dm._deviceSerial])
             cmd.append('shell')
-            for k, v in self.env.iteritems():
-                cmd.append("%s=%s" % (k, v))
+            cmd.extend(f"{k}={v}" for k, v in self.env.iteritems())
             cmd.append('/system/bin/b2g.sh')
             proc = threading.Thread(target=self._save_stdout_proc, args=(cmd, self.queue))
             proc.daemon = True

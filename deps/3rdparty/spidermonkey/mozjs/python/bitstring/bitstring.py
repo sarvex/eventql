@@ -94,9 +94,7 @@ class Error(Exception):
         self.params = params[1:]
 
     def __str__(self):
-        if self.params:
-            return self.msg.format(*self.params)
-        return self.msg
+        return self.msg.format(*self.params) if self.params else self.msg
 
 
 class ReadError(Error, IndexError):
@@ -156,8 +154,7 @@ class ConstByteStore(object):
 
     def getbyteslice(self, start, end):
         """Direct access to byte data."""
-        c = self._rawarray[start:end]
-        return c
+        return self._rawarray[start:end]
 
     @property
     def bytelength(self):
@@ -195,11 +192,10 @@ class ConstByteStore(object):
         # then join self on to the end of it.
         store = offsetcopy(store, (self.offset - store.bitlength) % 8)
         assert (store.offset + store.bitlength) % 8 == self.offset % 8
-        bit_offset = self.offset % 8
-        if bit_offset:
+        if bit_offset := self.offset % 8:
             # first do the byte with the join.
             store.setbyte(-1, (store.getbyte(-1) & (255 ^ (255 >> bit_offset)) | \
-                               (self._rawarray[self.byteoffset] & (255 >> bit_offset))))
+                                   (self._rawarray[self.byteoffset] & (255 >> bit_offset))))
             store._rawarray.extend(self._rawarray[self.byteoffset + 1: self.byteoffset + self.bytelength])
         else:
             store._rawarray.extend(self._rawarray[self.byteoffset: self.byteoffset + self.bytelength])
@@ -253,38 +249,39 @@ def offsetcopy(s, newoffset):
     assert 0 <= newoffset < 8
     if not s.bitlength:
         return copy.copy(s)
-    else:
-        if newoffset == s.offset % 8:
-            return ByteStore(s.getbyteslice(s.byteoffset, s.byteoffset + s.bytelength), s.bitlength, newoffset)
-        newdata = []
-        d = s._rawarray
-        assert newoffset != s.offset % 8
-        if newoffset < s.offset % 8:
-            # We need to shift everything left
-            shiftleft = s.offset % 8 - newoffset
+    if newoffset == s.offset % 8:
+        return ByteStore(s.getbyteslice(s.byteoffset, s.byteoffset + s.bytelength), s.bitlength, newoffset)
+    newdata = []
+    d = s._rawarray
+    assert newoffset != s.offset % 8
+    if newoffset < s.offset % 8:
+        # We need to shift everything left
+        shiftleft = s.offset % 8 - newoffset
             # First deal with everything except for the final byte
-            for x in range(s.byteoffset, s.byteoffset + s.bytelength - 1):
-                newdata.append(((d[x] << shiftleft) & 0xff) +\
-                               (d[x + 1] >> (8 - shiftleft)))
-            bits_in_last_byte = (s.offset + s.bitlength) % 8
-            if not bits_in_last_byte:
-                bits_in_last_byte = 8
-            if bits_in_last_byte > shiftleft:
-                newdata.append((d[s.byteoffset + s.bytelength - 1] << shiftleft) & 0xff)
-        else: # newoffset > s._offset % 8
-            shiftright = newoffset - s.offset % 8
-            newdata.append(s.getbyte(0) >> shiftright)
-            for x in range(s.byteoffset + 1, s.byteoffset + s.bytelength):
-                newdata.append(((d[x - 1] << (8 - shiftright)) & 0xff) +\
-                               (d[x] >> shiftright))
-            bits_in_last_byte = (s.offset + s.bitlength) % 8
-            if not bits_in_last_byte:
-                bits_in_last_byte = 8
-            if bits_in_last_byte + shiftright > 8:
-                newdata.append((d[s.byteoffset + s.bytelength - 1] << (8 - shiftright)) & 0xff)
-        new_s = ByteStore(bytearray(newdata), s.bitlength, newoffset)
-        assert new_s.offset == newoffset
-        return new_s
+        newdata.extend(
+            ((d[x] << shiftleft) & 0xFF) + (d[x + 1] >> (8 - shiftleft))
+            for x in range(s.byteoffset, s.byteoffset + s.bytelength - 1)
+        )
+        bits_in_last_byte = (s.offset + s.bitlength) % 8
+        if not bits_in_last_byte:
+            bits_in_last_byte = 8
+        if bits_in_last_byte > shiftleft:
+            newdata.append((d[s.byteoffset + s.bytelength - 1] << shiftleft) & 0xff)
+    else: # newoffset > s._offset % 8
+        shiftright = newoffset - s.offset % 8
+        newdata.append(s.getbyte(0) >> shiftright)
+        newdata.extend(
+            ((d[x - 1] << (8 - shiftright)) & 0xFF) + (d[x] >> shiftright)
+            for x in range(s.byteoffset + 1, s.byteoffset + s.bytelength)
+        )
+        bits_in_last_byte = (s.offset + s.bitlength) % 8
+        if not bits_in_last_byte:
+            bits_in_last_byte = 8
+        if bits_in_last_byte + shiftright > 8:
+            newdata.append((d[s.byteoffset + s.bytelength - 1] << (8 - shiftright)) & 0xff)
+    new_s = ByteStore(bytearray(newdata), s.bitlength, newoffset)
+    assert new_s.offset == newoffset
+    return new_s
 
 
 def equal(a, b):
@@ -333,13 +330,20 @@ def equal(a, b):
             return False
         # then everything up to the last
         b_a_offset = b_byteoffset - a_byteoffset
-        for x in range(1 + a_byteoffset, a_byteoffset + a_bytelength - 1):
-            if da[x] != db[b_a_offset + x]:
-                return False
-        # and finally the last byte
-        return (da[a_byteoffset + a_bytelength - 1] >> bits_spare_in_last_byte ==
-                db[b_byteoffset + b_bytelength - 1] >> bits_spare_in_last_byte)
-
+        return next(
+            (
+                False
+                for x in range(
+                    1 + a_byteoffset, a_byteoffset + a_bytelength - 1
+                )
+                if da[x] != db[b_a_offset + x]
+            ),
+            (
+                da[a_byteoffset + a_bytelength - 1] >> bits_spare_in_last_byte
+                == db[b_byteoffset + b_bytelength - 1]
+                >> bits_spare_in_last_byte
+            ),
+        )
     assert a_bitoff != b_bitoff
     # This is how much we need to shift a to the right to compare with b:
     shift = b_bitoff - a_bitoff
@@ -439,7 +443,7 @@ class MmapByteArray(object):
 
 # This creates a dictionary for every possible byte with the value being
 # the key with its bits reversed.
-BYTE_REVERSAL_DICT = dict()
+BYTE_REVERSAL_DICT = {}
 
 # For Python 2.x/ 3.x coexistence
 # Yes this is very very hacky.
@@ -505,31 +509,26 @@ _tokenname_to_initialiser = {'hex': 'hex', '0x': 'hex', '0X': 'hex', 'oct': 'oct
 
 def structparser(token):
     """Parse struct-like format string token into sub-token list."""
-    m = STRUCT_PACK_RE.match(token)
-    if not m:
+    if not (m := STRUCT_PACK_RE.match(token)):
         return [token]
-    else:
-        endian = m.group('endian')
-        if endian is None:
-            return [token]
-        # Split the format string into a list of 'q', '4h' etc.
-        formatlist = re.findall(STRUCT_SPLIT_RE, m.group('fmt'))
-        # Now deal with mulitiplicative factors, 4h -> hhhh etc.
-        fmt = ''.join([f[-1] * int(f[:-1]) if len(f) != 1 else
-                       f for f in formatlist])
-        if endian == '@':
-            # Native endianness
-            if byteorder == 'little':
-                endian = '<'
-            else:
-                assert byteorder == 'big'
-                endian = '>'
-        if endian == '<':
-            tokens = [REPLACEMENTS_LE[c] for c in fmt]
+    endian = m.group('endian')
+    if endian is None:
+        return [token]
+    # Split the format string into a list of 'q', '4h' etc.
+    formatlist = re.findall(STRUCT_SPLIT_RE, m.group('fmt'))
+    # Now deal with mulitiplicative factors, 4h -> hhhh etc.
+    fmt = ''.join([f[-1] * int(f[:-1]) if len(f) != 1 else
+                   f for f in formatlist])
+    if endian == '@':
+        if byteorder == 'little':
+            endian = '<'
         else:
-            assert endian == '>'
-            tokens = [REPLACEMENTS_BE[c] for c in fmt]
-    return tokens
+            assert byteorder == 'big'
+            endian = '>'
+    if endian == '<':
+        return [REPLACEMENTS_LE[c] for c in fmt]
+    assert endian == '>'
+    return [REPLACEMENTS_BE[c] for c in fmt]
 
 def tokenparser(fmt, keys=None, token_cache={}):
     """Divide the format string into tokens and parse them.
@@ -557,13 +556,11 @@ def tokenparser(fmt, keys=None, token_cache={}):
     return_values = []
     stretchy_token = False
     for meta_token in meta_tokens:
-        # See if it has a multiplicative factor
-        m = MULTIPLICATIVE_RE.match(meta_token)
-        if not m:
-            factor = 1
-        else:
+        if m := MULTIPLICATIVE_RE.match(meta_token):
             factor = int(m.group('factor'))
             meta_token = m.group('token')
+        else:
+            factor = 1
         # See if it's a struct-like format
         tokens = structparser(meta_token)
         ret_vals = []
@@ -575,9 +572,7 @@ def tokenparser(fmt, keys=None, token_cache={}):
             value = length = None
             if token == '':
                 continue
-            # Match literal tokens of the form 0x... 0o... and 0b...
-            m = LITERAL_RE.match(token)
-            if m:
+            if m := LITERAL_RE.match(token):
                 name = m.group('name')
                 value = m.group('value')
                 ret_vals.append([name, length, value])
@@ -655,15 +650,18 @@ def expand_brackets(s):
         if count:
             raise ValueError("Unbalanced parenthesis in '{0}'.".format(s))
         if start == 0 or s[start - 1] != '*':
-            s = s[0:start] + s[start + 1:p] + s[p + 1:]
+            s = s[:start] + s[start + 1:p] + s[p + 1:]
+        elif m := BRACKET_RE.search(s):
+            factor = int(m.group('factor'))
+            matchstart = m.start('factor')
+            s = (
+                s[:matchstart]
+                + (factor - 1) * f'{s[start + 1:p]},'
+                + s[start + 1 : p]
+                + s[p + 1 :]
+            )
         else:
-            m = BRACKET_RE.search(s)
-            if m:
-                factor = int(m.group('factor'))
-                matchstart = m.start('factor')
-                s = s[0:matchstart] + (factor - 1) * (s[start + 1:p] + ',') + s[start + 1:p] + s[p + 1:]
-            else:
-                raise ValueError("Failed to parse '{0}'.".format(s))
+            raise ValueError("Failed to parse '{0}'.".format(s))
     return s
 
 
@@ -919,10 +917,7 @@ class Bits(object):
                     stop += length
             start = max(start, 0)
             stop = min(stop, length)
-            if start < stop:
-                return self._slice(start, stop)
-            else:
-                return self.__class__()
+            return self._slice(start, stop) if start < stop else self.__class__()
 
     def __len__(self):
         """Return the length of the bitstring in bits."""
@@ -944,10 +939,10 @@ class Bits(object):
             return ''.join(('0x', self._readhex(MAX_CHARS * 4, 0), '...'))
         # If it's quite short and we can't do hex then use bin
         if length < 32 and length % 4 != 0:
-            return '0b' + self.bin
+            return f'0b{self.bin}'
         # If we can use hex then do so
         if not length % 4:
-            return '0x' + self.hex
+            return f'0x{self.hex}'
         # Otherwise first we do as much as we can in hex
         # then add on 1, 2 or 3 bits on at the end
         bits_at_end = length % 4
@@ -963,17 +958,18 @@ class Bits(object):
         """
         length = self.len
         if isinstance(self._datastore._rawarray, MmapByteArray):
-            offsetstring = ''
             if self._datastore.byteoffset or self._offset:
-                offsetstring = ", offset=%d" % (self._datastore._rawarray.byteoffset * 8 + self._offset)
+                offsetstring = ", offset=%d" % (
+                    self._datastore._rawarray.byteoffset * 8 + self._offset
+                )
+            else:
+                offsetstring = ''
             lengthstring = ", length=%d" % length
             return "{0}(filename='{1}'{2}{3})".format(self.__class__.__name__,
                     self._datastore._rawarray.source.name, lengthstring, offsetstring)
         else:
             s = self.__str__()
-            lengthstring = ''
-            if s.endswith('...'):
-                lengthstring = " # length={0}".format(length)
+            lengthstring = " # length={0}".format(length) if s.endswith('...') else ''
             return "{0}('{1}'){2}".format(self.__class__.__name__, s, lengthstring)
 
     def __eq__(self, bs):
@@ -1165,12 +1161,7 @@ class Bits(object):
         """Return an integer hash of the object."""
         # We can't in general hash the whole bitstring (it could take hours!)
         # So instead take some bits from the start and end.
-        if self.len <= 160:
-            # Use the whole bitstring.
-            shorter = self
-        else:
-            # Take 10 bytes from start and end
-            shorter = self[:80] + self[-80:]
+        shorter = self if self.len <= 160 else self[:80] + self[-80:]
         h = 0
         for byte in shorter.tobytes():
             try:
@@ -1359,14 +1350,14 @@ class Bits(object):
                                 "uint initialiser.")
         if uint >= (1 << length):
             msg = "{0} is too large an unsigned integer for a bitstring of length {1}. "\
-                  "The allowed range is [0, {2}]."
+                      "The allowed range is [0, {2}]."
             raise CreationError(msg, uint, length, (1 << length) - 1)
         if uint < 0:
             raise CreationError("uint cannot be initialsed by a negative number.")
         s = hex(uint)[2:]
         s = s.rstrip('L')
         if len(s) & 1:
-            s = '0' + s
+            s = f'0{s}'
         try:
             data = bytes.fromhex(s)
         except AttributeError:
@@ -1558,11 +1549,10 @@ class Bits(object):
                 f, = struct.unpack('>f', bytes(self._datastore.getbyteslice(startbyte, startbyte + 4)))
             elif length == 64:
                 f, = struct.unpack('>d', bytes(self._datastore.getbyteslice(startbyte, startbyte + 8)))
-        else:
-            if length == 32:
-                f, = struct.unpack('>f', self._readbytes(32, start))
-            elif length == 64:
-                f, = struct.unpack('>d', self._readbytes(64, start))
+        elif length == 32:
+            f, = struct.unpack('>f', self._readbytes(32, start))
+        elif length == 64:
+            f, = struct.unpack('>d', self._readbytes(64, start))
         try:
             return f
         except NameError:
@@ -1591,16 +1581,15 @@ class Bits(object):
     def _readfloatle(self, length, start):
         """Read bits and interpret as a little-endian float."""
         startbyte, offset = divmod(start + self._offset, 8)
-        if not offset:
-            if length == 32:
-                f, = struct.unpack('<f', bytes(self._datastore.getbyteslice(startbyte, startbyte + 4)))
-            elif length == 64:
-                f, = struct.unpack('<d', bytes(self._datastore.getbyteslice(startbyte, startbyte + 8)))
-        else:
+        if offset:
             if length == 32:
                 f, = struct.unpack('<f', self._readbytes(32, start))
             elif length == 64:
                 f, = struct.unpack('<d', self._readbytes(64, start))
+        elif length == 32:
+            f, = struct.unpack('<f', bytes(self._datastore.getbyteslice(startbyte, startbyte + 4)))
+        elif length == 64:
+            f, = struct.unpack('<d', bytes(self._datastore.getbyteslice(startbyte, startbyte + 8)))
         try:
             return f
         except NameError:
@@ -1674,10 +1663,7 @@ class Bits(object):
 
     def _setse(self, i):
         """Initialise bitstring with signed exponential-Golomb code for integer i."""
-        if i > 0:
-            u = (i * 2) - 1
-        else:
-            u = -2 * i
+        u = (i * 2) - 1 if i > 0 else -2 * i
         self._setue(u)
 
     def _getse(self):
@@ -1705,10 +1691,7 @@ class Bits(object):
         """
         codenum, pos = self._readue(pos)
         m = (codenum + 1) // 2
-        if not codenum % 2:
-            return -m, pos
-        else:
-            return m, pos
+        return (-m, pos) if not codenum % 2 else (m, pos)
 
     def _setuie(self, i):
         """Initialise bitstring with unsigned interleaved exponential-Golomb code for integer i.
@@ -1790,10 +1773,7 @@ class Bits(object):
         if not codenum:
             return 0, pos
         try:
-            if self[pos]:
-                return -codenum, pos + 1
-            else:
-                return codenum, pos + 1
+            return (-codenum, pos + 1) if self[pos] else (codenum, pos + 1)
         except IndexError:
             raise ReadError("Read off end of bitstring trying to read code.")
 
@@ -2197,7 +2177,7 @@ class Bits(object):
         while m * 2 < n:
             self._append(self)
             m *= 2
-        self._append(self[0:(n - m) * old_len])
+        self._append(self[:(n - m) * old_len])
         return self
 
     def _inplace_logical_helper(self, bs, f):
@@ -2312,11 +2292,10 @@ class Bits(object):
                 if name in ('se', 'ue', 'sie', 'uie'):
                     raise Error("It's not possible to parse a variable"
                                 "length token after a 'filler' token.")
-                else:
-                    if length is None:
-                        raise Error("It's not possible to have more than "
-                                    "one 'filler' token.")
-                    bits_after_stretchy_token += length
+                if length is None:
+                    raise Error("It's not possible to have more than "
+                                "one 'filler' token.")
+                bits_after_stretchy_token += length
             if length is None and name not in ('se', 'ue', 'sie', 'uie'):
                 assert not stretchy_token
                 stretchy_token = token
@@ -2364,9 +2343,7 @@ class Bits(object):
                 p += pos
                 break
             p += increment
-        if not found:
-            return ()
-        return (p * 8,)
+        return () if not found else (p * 8, )
 
     def _findregex(self, reg_ex, start, end, bytealigned):
         """Find first occurrence of a compiled regular expression.
@@ -2383,21 +2360,18 @@ class Bits(object):
         buffersize = increment + length
         while p < end:
             buf = self._readbin(min(buffersize, end - p), p)
-            # Test using regular expressions...
-            m = reg_ex.search(buf)
-            if m:
+            if m := reg_ex.search(buf):
                 pos = m.start()
             # pos = buf.find(targetbin)
             # if pos != -1:
                 # if bytealigned then we only accept byte aligned positions.
                 if not bytealigned or (p + pos) % 8 == 0:
                     return (p + pos,)
-                if bytealigned:
-                    # Advance to just beyond the non-byte-aligned match and try again...
-                    p += pos + 1
-                    continue
+                # Advance to just beyond the non-byte-aligned match and try again...
+                p += pos + 1
+                continue
             p += increment
-            # Not found, return empty tuple
+                # Not found, return empty tuple
         return ()
 
     def find(self, bs, start=None, end=None, bytealigned=None):
@@ -2482,10 +2456,7 @@ class Bits(object):
             except AttributeError:
                 pass
             yield p[0]
-            if bytealigned:
-                start = p[0] + 8
-            else:
-                start = p[0] + 1
+            start = p[0] + 8 if bytealigned else p[0] + 1
             if start >= end:
                 break
         return
@@ -2653,8 +2624,8 @@ class Bits(object):
         # If the bitstring is file based then we don't want to read it all
         # in to memory.
         chunksize = 1024 * 1024 # 1 MB chunks
+        a = 0
         if not self._offset:
-            a = 0
             bytelen = self._datastore.bytelength
             p = self._datastore.getbyteslice(a, min(a + chunksize, bytelen - 1))
             while len(p) == chunksize:
@@ -2668,8 +2639,6 @@ class Bits(object):
                 bits_in_final_byte = 8
             f.write(self[-bits_in_final_byte:].tobytes())
         else:
-            # Really quite inefficient...
-            a = 0
             b = a + chunksize * 8
             while b <= self.len:
                 f.write(self._slice(a, b)._getbytes())
@@ -2726,7 +2695,7 @@ class Bits(object):
                 p += length
             if not 0 <= p < length:
                 raise IndexError("Bit position {0} out of range.".format(p))
-            if not self._datastore.getbit(p) is value:
+            if self._datastore.getbit(p) is not value:
                 return False
         return True
 
@@ -3139,8 +3108,7 @@ class BitArray(Bits):
                 start = key.start
                 if key.start < 0:
                     start += self.len
-                if start < 0:
-                    start = 0
+                start = max(start, 0)
             stop = self.len
             if key.stop is not None:
                 stop = key.stop
@@ -3213,8 +3181,7 @@ class BitArray(Bits):
                 start = key.start
                 if key.start < 0 and stop is None:
                     start += self.len
-                if start < 0:
-                    start = 0
+                start = max(start, 0)
             if stop is None:
                 stop = self.len
             if start > stop:
@@ -3327,9 +3294,7 @@ class BitArray(Bits):
             # Prevent self assignment woes
             new = copy.copy(self)
         positions = [lengths[0] + start]
-        for l in lengths[1:-1]:
-            # Next position is the previous one plus the length of the next section.
-            positions.append(positions[-1] + l)
+        positions.extend(positions[-1] + l for l in lengths[1:-1])
         # We have all the positions that need replacements. We do them
         # in reverse order so that they won't move around as we replace.
         positions.reverse()

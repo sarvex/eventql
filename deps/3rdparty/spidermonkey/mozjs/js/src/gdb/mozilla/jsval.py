@@ -198,8 +198,8 @@ class jsval_layout(object):
             return 'JSVAL_TRUE' if self.box.as_uint32() else 'JSVAL_FALSE'
         elif tag == self.jtc.MAGIC:
             value = self.box.as_uint32()
-            if 0 <= value and value < len(self.jtc.magic_names):
-                return '$jsmagic(%s)' % (self.jtc.magic_names[value],)
+            if 0 <= value < len(self.jtc.magic_names):
+                return f'$jsmagic({self.jtc.magic_names[value]})'
             else:
                 return '$jsmagic(%d)' % (value,)
         elif tag == self.jtc.STRING:
@@ -214,7 +214,7 @@ class jsval_layout(object):
             value = self.value['asDouble']
         else:
             return '$jsval(unrecognized!)'
-        return '$jsval(%s)' % (value,)
+        return f'$jsval({value})'
 
 @pretty_printer('JS::Value')
 class JSValue(object):

@@ -171,11 +171,9 @@ if __name__ == '__main__':
     argv_arr = CommandLineToArgv(GetCommandLine(), ctypes.byref(argc))
     # The first argv will be "python", the second will be the .py file
     argv = argv_arr[1:argc.value]
-  else:
-    # For consistency, do it on Unix as well
-    if sys.stdin.encoding is not None:
-      argv = [unicode(arg, sys.stdin.encoding) for arg in sys.argv]
-    else:
-      argv = [unicode(arg) for arg in sys.argv]
+  elif sys.stdin.encoding is None:
+    argv = [unicode(arg) for arg in sys.argv]
 
+  else:
+    argv = [unicode(arg, sys.stdin.encoding) for arg in sys.argv]
   sys.exit(_nsinstall_internal(argv[1:]))

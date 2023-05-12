@@ -43,19 +43,31 @@ def main():
         nightly_mozconfig_path = path.join(browser_dir, 'config/mozconfigs', platform, 'nightly')
 
         log.info("Comparing beta against nightly mozconfigs")
-        ret_code = subprocess.call([python_exe, script_path, '--whitelist',
-                                    whitelist_path, '--no-download',
-                                    platform + ',' + beta_mozconfig_path +
-                                    ',' + nightly_mozconfig_path])
+        ret_code = subprocess.call(
+            [
+                python_exe,
+                script_path,
+                '--whitelist',
+                whitelist_path,
+                '--no-download',
+                f'{platform},{beta_mozconfig_path},{nightly_mozconfig_path}',
+            ]
+        )
 
         if ret_code > 0:
             return ret_code
 
         log.info("Comparing release against nightly mozconfigs")
-        ret_code = subprocess.call([python_exe, script_path, '--whitelist',
-                                    whitelist_path, '--no-download',
-                                    platform + ',' + release_mozconfig_path +
-                                    ',' + nightly_mozconfig_path])
+        ret_code = subprocess.call(
+            [
+                python_exe,
+                script_path,
+                '--whitelist',
+                whitelist_path,
+                '--no-download',
+                f'{platform},{release_mozconfig_path},{nightly_mozconfig_path}',
+            ]
+        )
 
         return ret_code
 

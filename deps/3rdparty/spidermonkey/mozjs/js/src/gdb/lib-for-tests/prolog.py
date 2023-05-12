@@ -5,7 +5,7 @@ import sys
 import traceback
 
 # testlibdir is set on the GDB command line, via --eval-command python testlibdir=...
-sys.path[0:0] = [testlibdir]
+sys.path[:0] = [testlibdir]
 
 # Run the C++ fragment named |fragment|, stopping on entry to |function|
 # ('breakpoint', by default) and then select the calling frame.
@@ -13,7 +13,7 @@ def run_fragment(fragment, function='breakpoint'):
     # Arrange to stop at a reasonable place in the test program.
     bp = gdb.Breakpoint(function);
     try:
-        gdb.execute("run %s" % (fragment,))
+        gdb.execute(f"run {fragment}")
         # Check that we did indeed stop by hitting the breakpoint we set.
         assert bp.hit_count == 1
     finally:

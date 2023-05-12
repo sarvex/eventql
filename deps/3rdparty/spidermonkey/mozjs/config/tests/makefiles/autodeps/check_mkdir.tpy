@@ -35,13 +35,13 @@ def myopts(vals):
     """
 
     if not hasattr(myopts, 'vals'):
-        if 'argparse' in sys.modules:
-            tmp = { } # key existance enables unittest module debug
-        else:
-            tmp = { 'debug': False, 'verbose': False }
-
+        tmp = (
+            {}
+            if 'argparse' in sys.modules
+            else {'debug': False, 'verbose': False}
+        )
         for k in dir(vals):
-            if k[0:1] == '_':
+            if k[:1] == '_':
                 continue
             tmp[k] = getattr(vals, k)
         myopts.vals = tmp
@@ -67,7 +67,7 @@ def path2posix(src):
     ## Support path testing on all platforms
     drive = ''
     winpath = src.find(':')
-    if -1 != winpath and 10 > winpath:
+    if winpath != -1 and winpath < 10:
         (drive, tail) = src.split(':', 1)
 
     if drive:
@@ -76,8 +76,7 @@ def path2posix(src):
     else: # os.name == 'posix'
         todo = src.split('\\')
 
-    dst = '/'.join(todo)
-    return dst
+    return '/'.join(todo)
     
 
 def checkMkdir(work, debug=False):
@@ -232,8 +231,8 @@ class TestMakeLogic(unittest.TestCase):
 
         for val,exp in todo.items():
             found = path2posix(val)
-            tst = "posix2path(%s): %s != %s)" % (val, exp, found)
-            self.assertEqual(exp, found, "%s: invalid path detected" % (tst))
+            tst = f"posix2path({val}): {exp} != {found})"
+            self.assertEqual(exp, found, f"{tst}: invalid path detected")
 
 
     def test_mkdir(self):
@@ -261,9 +260,5 @@ if __name__ == '__main__':
     myopts(opts)
 
     if opts:
-        if hasattr(opts, 'unittest_args'):
-            sys.argv[1:] = opts.unittest_args
-        else:
-            sys.argv[1:] = []
-
+        sys.argv[1:] = opts.unittest_args if hasattr(opts, 'unittest_args') else []
     unittest.main()

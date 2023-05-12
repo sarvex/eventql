@@ -23,6 +23,5 @@ except ImportError:
 
 # Register our pretty-printers with |objfile|.
 def register(objfile):
-    lookup = mozilla.prettyprinters.lookup_for_objfile(objfile)
-    if lookup:
+    if lookup := mozilla.prettyprinters.lookup_for_objfile(objfile):
         gdb.printing.register_pretty_printer(objfile, lookup, replace=True)

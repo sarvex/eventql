@@ -19,15 +19,13 @@ class ZipFile(zipfile.ZipFile):
                lock = False):
     if lock:
       assert isinstance(file, basestring)
-      self.lockfile = lock_file(file + '.lck')
+      self.lockfile = lock_file(f'{file}.lck')
     else:
       self.lockfile = None
 
-    if mode == 'a' and lock:
-      # appending to a file which doesn't exist fails, but we can't check
-      # existence util we hold the lock
-      if (not os.path.isfile(file)) or os.path.getsize(file) == 0:
-        mode = 'w'
+    if (mode == 'a' and lock
+        and ((not os.path.isfile(file)) or os.path.getsize(file) == 0)):
+      mode = 'w'
 
     zipfile.ZipFile.__init__(self, file, mode, compression)
     self._remove = []

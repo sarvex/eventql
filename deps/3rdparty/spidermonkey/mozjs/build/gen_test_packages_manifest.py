@@ -38,9 +38,13 @@ def parse_args():
                         action="store", dest="jsshell",
                         help="Name of the jsshell zip.")
     for harness in PACKAGE_SPECIFIED_HARNESSES:
-        parser.add_argument("--%s" % harness, required=True,
-                            action="store", dest=harness,
-                            help="Name of the %s zip." % harness)
+        parser.add_argument(
+            f"--{harness}",
+            required=True,
+            action="store",
+            dest=harness,
+            help=f"Name of the {harness} zip.",
+        )
     parser.add_argument("--dest-file", required=True,
                         action="store", dest="destfile",
                         help="Path to the output file to be written.")

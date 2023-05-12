@@ -71,7 +71,7 @@ class BarrieredBase(Common):
 def deref(root):
     tag = root.type.strip_typedefs().tag
     if not tag:
-        raise TypeError("Can't dereference type with no structure tag: %s" % (root.type,))
+        raise TypeError(f"Can't dereference type with no structure tag: {root.type}")
     elif tag.startswith('js::HeapPtr<'):
         return root['value']
     elif tag.startswith('JS::Rooted<'):

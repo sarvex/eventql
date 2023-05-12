@@ -54,16 +54,14 @@ class Location(object):
         return Location(self.path, line, column)
 
     def __str__(self):
-        return "%s:%s:%s" % (self.path, self.line, self.column)
+        return f"{self.path}:{self.line}:{self.column}"
 
 def _expandwildcards(makefile, tlist):
     for t in tlist:
         if not hasglob(t):
             yield t
         else:
-            l = glob(makefile.workdir, t)
-            for r in l:
-                yield r
+            yield from glob(makefile.workdir, t)
 
 _flagescape = re.compile(r'([\s\\])')
 
@@ -107,7 +105,7 @@ class Statement(object):
 
     def execute(self, makefile, context):
         """Executes this Statement within a make file execution context."""
-        raise Exception("%s must implement execute()." % self.__class__)
+        raise Exception(f"{self.__class__} must implement execute().")
 
     def to_source(self):
         """Obtain the make file "source" representation of the Statement.
@@ -115,10 +113,10 @@ class Statement(object):
         This converts an individual Statement back to a string that can again
         be parsed into this Statement.
         """
-        raise Exception("%s must implement to_source()." % self.__class__)
+        raise Exception(f"{self.__class__} must implement to_source().")
 
     def __eq__(self, other):
-        raise Exception("%s must implement __eq__." % self.__class__)
+        raise Exception(f"{self.__class__} must implement __eq__.")
 
     def __ne__(self, other):
         return self.__eq__(other)
@@ -188,7 +186,7 @@ class Rule(Statement):
             context.currule = DummyRule()
             return
 
-        ispatterns = set((t.ispattern() for t in targets))
+        ispatterns = {t.ispattern() for t in targets}
         if len(ispatterns) == 2:
             raise data.DataError("Mixed implicit and normal rule", self.targetexp.loc)
         ispattern, = ispatterns
@@ -210,11 +208,7 @@ class Rule(Statement):
         print >>fd, "%sRule %s: %s" % (indent, self.targetexp, self.depexp)
 
     def to_source(self):
-        sep = ':'
-
-        if self.doublecolon:
-            sep = '::'
-
+        sep = '::' if self.doublecolon else ':'
         deps = self.depexp.to_source()
         if len(deps) > 0 and not deps[0].isspace():
             sep += ' '
@@ -275,10 +269,16 @@ class StaticPatternRule(Statement):
 
         for t in targets:
             if data.Pattern(t).ispattern():
-                raise data.DataError("Target '%s' of a static pattern rule must not be a pattern" % (t,), self.targetexp.loc)
+                raise data.DataError(
+                    f"Target '{t}' of a static pattern rule must not be a pattern",
+                    self.targetexp.loc,
+                )
             stem = pattern.match(t)
             if stem is None:
-                raise data.DataError("Target '%s' does not match the static pattern '%s'" % (t, pattern), self.targetexp.loc)
+                raise data.DataError(
+                    f"Target '{t}' does not match the static pattern '{pattern}'",
+                    self.targetexp.loc,
+                )
             makefile.gettarget(t).addrule(data.PatternRuleInstance(rule, '', stem, pattern.ismatchany()))
 
         makefile.foundtarget(targets[0])
@@ -288,11 +288,7 @@ class StaticPatternRule(Statement):
         print >>fd, "%sStaticPatternRule %s: %s: %s" % (indent, self.targetexp, self.patternexp, self.depexp)
 
     def to_source(self):
-        sep = ':'
-
-        if self.doublecolon:
-            sep = '::'
-
+        sep = '::' if self.doublecolon else ':'
         pattern = self.patternexp.to_source()
         deps = self.depexp.to_source()
 
@@ -353,10 +349,7 @@ class Command(Statement):
         return '\n'.join(['\t%s' % line for line in s.split('\n')])
 
     def __eq__(self, other):
-        if not isinstance(other, Command):
-            return False
-
-        return self.exp == other.exp
+        return False if not isinstance(other, Command) else self.exp == other.exp
 
 class SetVariable(Statement):
     """
@@ -469,36 +462,19 @@ class SetVariable(Statement):
 
         value = ''.join(chars)
 
-        prefix = ''
-        if self.source == data.Variables.SOURCE_OVERRIDE:
-            prefix = 'override '
-
-        # SetVariable come in two flavors: simple and target-specific.
-
-        # We handle the target-specific syntax first.
         if self.targetexp is not None:
-            return '%s: %s %s %s' % (
-                self.targetexp.to_source(),
-                self.vnameexp.to_source(),
-                self.token,
-                value)
+            return f'{self.targetexp.to_source()}: {self.vnameexp.to_source()} {self.token} {value}'
 
+        prefix = 'override ' if self.source == data.Variables.SOURCE_OVERRIDE else ''
         # The variable could be multi-line or have leading whitespace. For
         # regular variable assignment, whitespace after the token but before
         # the value is ignored. If we see leading whitespace in the value here,
         # the variable must have come from a define.
-        if value.count('\n') > 0 or (len(value) and value[0].isspace()):
-            # The parser holds the token in vnameexp for whatever reason.
-            return '%sdefine %s\n%s\nendef' % (
-                prefix,
-                self.vnameexp.to_source(),
-                value)
-
-        return '%s%s %s %s' % (
-                prefix,
-                self.vnameexp.to_source(),
-                self.token,
-                value)
+        return (
+            '%sdefine %s\n%s\nendef' % (prefix, self.vnameexp.to_source(), value)
+            if '\n' in value or (len(value) and value[0].isspace())
+            else f'{prefix}{self.vnameexp.to_source()} {self.token} {value}'
+        )
 
 class Condition(object):
     """
@@ -512,7 +488,7 @@ class Condition(object):
     """
 
     def __eq__(self, other):
-        raise Exception("%s must implement __eq__." % __class__)
+        raise Exception(f"{__class__} must implement __eq__.")
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -543,7 +519,7 @@ class EqCondition(Condition):
         return (r1 == r2) == self.expected
 
     def __str__(self):
-        return "ifeq (expected=%s) %s %s" % (self.expected, self.exp1, self.exp2)
+        return f"ifeq (expected={self.expected}) {self.exp1} {self.exp2}"
 
     def __eq__(self, other):
         if not isinstance(other, EqCondition):
@@ -580,7 +556,7 @@ class IfdefCondition(Condition):
         return (len(value) > 0) == self.expected
 
     def __str__(self):
-        return "ifdef (expected=%s) %s" % (self.expected, self.exp)
+        return f"ifdef (expected={self.expected}) {self.exp}"
 
     def __eq__(self, other):
         if not isinstance(other, IfdefCondition):
@@ -633,7 +609,9 @@ class ConditionBlock(Statement):
         condition.loc = loc
 
         if len(self._groups) and isinstance(self._groups[-1][0], ElseCondition):
-            raise parser.SyntaxError("Multiple else conditions for block starting at %s" % self.loc, loc)
+            raise parser.SyntaxError(
+                f"Multiple else conditions for block starting at {self.loc}", loc
+            )
 
         self._groups.append((condition, StatementList()))
 
@@ -641,14 +619,11 @@ class ConditionBlock(Statement):
         self._groups[-1][1].append(statement)
 
     def execute(self, makefile, context):
-        i = 0
-        for c, statements in self._groups:
+        for i, (c, statements) in enumerate(self._groups):
             if c.evaluate(makefile):
                 _log.debug("Condition at %s met by clause #%i", self.loc, i)
                 statements.execute(makefile, context)
                 return
-
-            i += 1
 
     def dump(self, fd, indent):
         print >>fd, "%sConditionBlock" % (indent,)
@@ -662,14 +637,9 @@ class ConditionBlock(Statement):
 
     def to_source(self):
         lines = []
-        index = 0
-        for condition, statements in self:
+        for index, (condition, statements) in enumerate(self):
             lines.append(ConditionBlock.condition_source(condition, index))
-            index += 1
-
-            for statement in statements:
-                lines.append(statement.to_source())
-
+            lines.extend(statement.to_source() for statement in statements)
         lines.append('endif')
 
         return '\n'.join(lines)
@@ -708,11 +678,7 @@ class ConditionBlock(Statement):
         if isinstance(statement, IfdefCondition):
             s = statement.exp.s
 
-            if statement.expected:
-                return '%sifdef %s' % (prefix, s)
-
-            return '%sifndef %s' % (prefix, s)
-
+            return f'{prefix}ifdef {s}' if statement.expected else f'{prefix}ifndef {s}'
         if isinstance(statement, EqCondition):
             args = [
                 statement.exp1.to_source(escape_comments=True),
@@ -721,7 +687,7 @@ class ConditionBlock(Statement):
             use_quotes = False
             single_quote_present = False
             double_quote_present = False
-            for i, arg in enumerate(args):
+            for arg in args:
                 if len(arg) > 0 and (arg[0].isspace() or arg[-1].isspace()):
                     use_quotes = True
 
@@ -738,27 +704,18 @@ class ConditionBlock(Statement):
             if use_quotes:
                 for i, arg in enumerate(args):
                     # Double to single quotes.
-                    if single_quote_present:
-                        args[i] = '"' + arg + '"'
-                    else:
-                        args[i] = "'" + arg + "'"
-
+                    args[i] = f'"{arg}"' if single_quote_present else f"'{arg}'"
             body = None
-            if use_quotes:
-                body = ' '.join(args)
-            else:
-                body = '(%s)' % ','.join(args)
-
+            body = ' '.join(args) if use_quotes else f"({','.join(args)})"
             if statement.expected:
-                return '%sifeq %s' % (prefix, body)
+                return f'{prefix}ifeq {body}'
 
-            return '%sifneq %s' % (prefix, body)
+            return f'{prefix}ifneq {body}'
 
         if isinstance(statement, ElseCondition):
             return 'else'
 
-        raise Exception('Unhandled Condition statement: %s' %
-                statement.__class__)
+        raise Exception(f'Unhandled Condition statement: {statement.__class__}')
 
     def __iter__(self):
         return iter(self._groups)
@@ -796,12 +753,8 @@ class Include(Statement):
         print >>fd, "%sInclude %s" % (indent, self.exp)
 
     def to_source(self):
-        prefix = ''
-
-        if not self.required:
-            prefix = '-'
-
-        return '%sinclude %s' % (prefix, self.exp.to_source())
+        prefix = '-' if not self.required else ''
+        return f'{prefix}include {self.exp.to_source()}'
 
     def __eq__(self, other):
         if not isinstance(other, Include):
@@ -822,10 +775,11 @@ class VPathDirective(Statement):
         self.exp = exp
 
     def execute(self, makefile, context):
-        words = list(data.stripdotslashes(self.exp.resolvesplit(makefile, makefile.variables)))
-        if len(words) == 0:
-            makefile.clearallvpaths()
-        else:
+        if words := list(
+            data.stripdotslashes(
+                self.exp.resolvesplit(makefile, makefile.variables)
+            )
+        ):
             pattern = data.Pattern(words[0])
             mpaths = words[1:]
 
@@ -839,17 +793,17 @@ class VPathDirective(Statement):
                 if len(dirs):
                     makefile.addvpath(pattern, dirs)
 
+        else:
+            makefile.clearallvpaths()
+
     def dump(self, fd, indent):
         print >>fd, "%sVPath %s" % (indent, self.exp)
 
     def to_source(self):
-        return 'vpath %s' % self.exp.to_source()
+        return f'vpath {self.exp.to_source()}'
 
     def __eq__(self, other):
-        if not isinstance(other, VPathDirective):
-            return False
-
-        return self.exp == other.exp
+        return self.exp == other.exp if isinstance(other, VPathDirective) else False
 
 class ExportDirective(Statement):
     """
@@ -888,15 +842,10 @@ class ExportDirective(Statement):
         print >>fd, "%sExport (single=%s) %s" % (indent, self.single, self.exp)
 
     def to_source(self):
-        return ('export %s' % self.exp.to_source()).rstrip()
+        return f'export {self.exp.to_source()}'.rstrip()
 
     def __eq__(self, other):
-        if not isinstance(other, ExportDirective):
-            return False
-
-        # single is irrelevant because it just says whether the next Statement
-        # contains a variable definition.
-        return self.exp == other.exp
+        return self.exp == other.exp if isinstance(other, ExportDirective) else False
 
 class UnexportDirective(Statement):
     """
@@ -918,13 +867,10 @@ class UnexportDirective(Statement):
         print >>fd, "%sUnexport %s" % (indent, self.exp)
 
     def to_source(self):
-        return 'unexport %s' % self.exp.to_source()
+        return f'unexport {self.exp.to_source()}'
 
     def __eq__(self, other):
-        if not isinstance(other, UnexportDirective):
-            return False
-
-        return self.exp == other.exp
+        return self.exp == other.exp if isinstance(other, UnexportDirective) else False
 
 class EmptyDirective(Statement):
     """
@@ -953,10 +899,7 @@ class EmptyDirective(Statement):
         return self.exp.to_source()
 
     def __eq__(self, other):
-        if not isinstance(other, EmptyDirective):
-            return False
-
-        return self.exp == other.exp
+        return self.exp == other.exp if isinstance(other, EmptyDirective) else False
 
 class _EvalContext(object):
     __slots__ = ('currule', 'weak')
@@ -1003,4 +946,4 @@ def iterstatements(stmts):
         yield s
         if isinstance(s, ConditionBlock):
             for c, sl in s:
-                for s2 in iterstatments(sl): yield s2
+                yield from iterstatments(sl)

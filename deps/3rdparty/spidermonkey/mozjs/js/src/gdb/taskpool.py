@@ -101,7 +101,7 @@ class TaskPool(object):
 
                 # How many seconds do we have until the earliest deadline?
                 now = time.time()
-                secs_to_next_deadline = max(min([t.deadline for t in running]) - now, 0)
+                secs_to_next_deadline = max(min(t.deadline for t in running) - now, 0)
 
                 # Wait for output or a timeout.
                 stdouts_and_stderrs = ([t.pipe.stdout for t in running]

@@ -31,7 +31,7 @@ def parsemakeflags(env):
         return []
 
     if _simpleopts.match(makeflags):
-        makeflags = '-' + makeflags
+        makeflags = f'-{makeflags}'
 
     opts = []
     curopt = ''
@@ -52,7 +52,7 @@ def parsemakeflags(env):
             if i == len(makeflags):
                 raise data.DataError("MAKEFLAGS has trailing backslash")
             c = makeflags[i]
-            
+
         curopt += c
         i += 1
 

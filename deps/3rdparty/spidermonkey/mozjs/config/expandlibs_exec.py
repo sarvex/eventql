@@ -63,7 +63,7 @@ class ExpandArgsMore(ExpandArgs):
                 os.remove(tmp)
 
     def extract(self):
-        self[0:] = self._extract(self)
+        self[:] = self._extract(self)
 
     def _extract(self, args):
         '''When a static library name is found, either extract its contents
@@ -95,7 +95,15 @@ class ExpandArgsMore(ExpandArgs):
                             newlist += [arg]
                             continue
                         for f in files:
-                            subprocess.call([conf.AR, '-NOLOGO', '-EXTRACT:%s' % f, os.path.abspath(arg)], cwd=tmp)
+                            subprocess.call(
+                                [
+                                    conf.AR,
+                                    '-NOLOGO',
+                                    f'-EXTRACT:{f}',
+                                    os.path.abspath(arg),
+                                ],
+                                cwd=tmp,
+                            )
                     else:
                         subprocess.call(ar_extract + [os.path.abspath(arg)], cwd=tmp)
                     objs = []
@@ -124,15 +132,15 @@ class ExpandArgsMore(ExpandArgs):
         objs = [o for o in self if isObject(o)]
         if not len(objs): return
         fd, tmp = tempfile.mkstemp(suffix=".list",dir=os.curdir)
-        if conf.EXPAND_LIBS_LIST_STYLE == "linkerscript":
+        if conf.EXPAND_LIBS_LIST_STYLE == "filelist":
+            content = ["%s\n" % obj for obj in objs]
+            ref = f"-Wl,-filelist,{tmp}"
+        elif conf.EXPAND_LIBS_LIST_STYLE == "linkerscript":
             content = ['INPUT("%s")\n' % obj for obj in objs]
             ref = tmp
-        elif conf.EXPAND_LIBS_LIST_STYLE == "filelist":
-            content = ["%s\n" % obj for obj in objs]
-            ref = "-Wl,-filelist," + tmp
         elif conf.EXPAND_LIBS_LIST_STYLE == "list":
             content = ["%s\n" % obj for obj in objs]
-            ref = "@" + tmp
+            ref = f"@{tmp}"
         else:
             os.close(fd)
             os.remove(tmp)
@@ -142,8 +150,10 @@ class ExpandArgsMore(ExpandArgs):
         f.writelines(content)
         f.close()
         idx = self.index(objs[0])
-        newlist = self[0:idx] + [ref] + [item for item in self[idx:] if item not in objs]
-        self[0:] = newlist
+        newlist = (
+            self[:idx] + [ref] + [item for item in self[idx:] if item not in objs]
+        )
+        self[:] = newlist
 
     def _getFoldedSections(self):
         '''Returns a dict about folded sections.
@@ -175,8 +185,13 @@ class ExpandArgsMore(ExpandArgs):
     def _getOrderedSections(self, ordered_symbols):
         '''Given an ordered list of symbols, returns the corresponding list
         of sections following the order.'''
-        if not conf.EXPAND_LIBS_ORDER_STYLE in ['linkerscript', 'section-ordering-file']:
-            raise Exception('EXPAND_LIBS_ORDER_STYLE "%s" is not supported' % conf.EXPAND_LIBS_ORDER_STYLE)
+        if conf.EXPAND_LIBS_ORDER_STYLE not in [
+            'linkerscript',
+            'section-ordering-file',
+        ]:
+            raise Exception(
+                f'EXPAND_LIBS_ORDER_STYLE "{conf.EXPAND_LIBS_ORDER_STYLE}" is not supported'
+            )
         finder = SectionFinder([arg for arg in self if isObject(arg) or os.path.splitext(arg)[1] == conf.LIB_SUFFIX])
         folded = self._getFoldedSections()
         sections = set()
@@ -193,7 +208,7 @@ class ExpandArgsMore(ExpandArgs):
                 else:
                     all_symbol_sections.append(section)
             for section in all_symbol_sections:
-                if not section in sections:
+                if section not in sections:
                     ordered_sections.append(section)
                     sections.add(section)
         return ordered_sections
@@ -217,26 +232,31 @@ class ExpandArgsMore(ExpandArgs):
         # Order is important
         linked_sections = [s for s in linked_sections if s in split_sections]
 
-        if conf.EXPAND_LIBS_ORDER_STYLE == 'section-ordering-file':
+        if conf.EXPAND_LIBS_ORDER_STYLE == 'linkerscript':
+            option = '-Wl,-T,%s'
+            section_insert_before = dict(SECTION_INSERT_BEFORE)
+            for linked_section in linked_sections:
+                content.extend(('SECTIONS {', '  %s : {' % linked_section))
+                content.extend(f'    *({s})' for s in split_sections[linked_section])
+                content.extend(
+                    (
+                        '  }',
+                        '}',
+                        f'INSERT BEFORE {section_insert_before[linked_section]}',
+                    )
+                )
+        elif conf.EXPAND_LIBS_ORDER_STYLE == 'section-ordering-file':
             option = '-Wl,--section-ordering-file,%s'
             content = sections
             for linked_section in linked_sections:
                 content.extend(split_sections[linked_section])
-                content.append('%s.*' % linked_section)
+                content.append(f'{linked_section}.*')
                 content.append(linked_section)
 
-        elif conf.EXPAND_LIBS_ORDER_STYLE == 'linkerscript':
-            option = '-Wl,-T,%s'
-            section_insert_before = dict(SECTION_INSERT_BEFORE)
-            for linked_section in linked_sections:
-                content.append('SECTIONS {')
-                content.append('  %s : {' % linked_section)
-                content.extend('    *(%s)' % s for s in split_sections[linked_section])
-                content.append('  }')
-                content.append('}')
-                content.append('INSERT BEFORE %s' % section_insert_before[linked_section])
         else:
-            raise Exception('EXPAND_LIBS_ORDER_STYLE "%s" is not supported' % conf.EXPAND_LIBS_ORDER_STYLE)
+            raise Exception(
+                f'EXPAND_LIBS_ORDER_STYLE "{conf.EXPAND_LIBS_ORDER_STYLE}" is not supported'
+            )
 
         fd, tmp = tempfile.mkstemp(dir=os.curdir)
         f = os.fdopen(fd, "w")
@@ -251,16 +271,21 @@ class SectionFinder(object):
 
     def __init__(self, objs):
         '''Creates an instance, given a list of object files.'''
-        if not conf.EXPAND_LIBS_ORDER_STYLE in ['linkerscript', 'section-ordering-file']:
-            raise Exception('EXPAND_LIBS_ORDER_STYLE "%s" is not supported' % conf.EXPAND_LIBS_ORDER_STYLE)
+        if conf.EXPAND_LIBS_ORDER_STYLE not in [
+            'linkerscript',
+            'section-ordering-file',
+        ]:
+            raise Exception(
+                f'EXPAND_LIBS_ORDER_STYLE "{conf.EXPAND_LIBS_ORDER_STYLE}" is not supported'
+            )
         self.mapping = {}
         for obj in objs:
             if not isObject(obj) and os.path.splitext(obj)[1] != conf.LIB_SUFFIX:
-                raise Exception('%s is not an object nor a static library' % obj)
+                raise Exception(f'{obj} is not an object nor a static library')
             for symbol, section in SectionFinder._getSymbols(obj):
                 sym = SectionFinder._normalize(symbol)
                 if sym in self.mapping:
-                    if not section in self.mapping[sym]:
+                    if section not in self.mapping[sym]:
                         self.mapping[sym].append(section)
                 else:
                     self.mapping[sym] = [section]
@@ -271,9 +296,7 @@ class SectionFinder(object):
         list of sections containing its corresponding normal symbol and the
         other thunks for that symbol.'''
         sym = SectionFinder._normalize(symbol)
-        if sym in self.mapping:
-            return self.mapping[sym]
-        return []
+        return self.mapping[sym] if sym in self.mapping else []
 
     @staticmethod
     def _normalize(symbol):

@@ -34,7 +34,7 @@ class MacTool(object):
     if len(args) < 1:
       raise Exception("Not enough arguments")
 
-    method = "Exec%s" % self._CommandifyName(args[0])
+    method = f"Exec{self._CommandifyName(args[0])}"
     return getattr(self, method)(*args[1:])
 
   def _CommandifyName(self, name_string):
@@ -80,22 +80,20 @@ class MacTool(object):
   def _CopyStringsFile(self, source, dest):
     """Copies a .strings file using iconv to reconvert the input into UTF-16."""
     input_code = self._DetectInputEncoding(source) or "UTF-8"
-    fp = open(dest, 'w')
-    args = ['/usr/bin/iconv', '--from-code', input_code, '--to-code',
-        'UTF-16', source]
-    subprocess.call(args, stdout=fp)
-    fp.close()
+    with open(dest, 'w') as fp:
+      args = ['/usr/bin/iconv', '--from-code', input_code, '--to-code',
+          'UTF-16', source]
+      subprocess.call(args, stdout=fp)
 
   def _DetectInputEncoding(self, file_name):
     """Reads the first few bytes from file_name and tries to guess the text
     encoding. Returns None as a guess if it can't detect it."""
-    fp = open(file_name, 'rb')
-    try:
-      header = fp.read(3)
-    except e:
-      fp.close()
-      return None
-    fp.close()
+    with open(file_name, 'rb') as fp:
+      try:
+        header = fp.read(3)
+      except e:
+        fp.close()
+        return None
     if header.startswith("\xFE\xFF"):
       return "UTF-16BE"
     elif header.startswith("\xFF\xFE"):
@@ -107,11 +105,8 @@ class MacTool(object):
 
   def ExecCopyInfoPlist(self, source, dest):
     """Copies the |source| Info.plist to the destination directory |dest|."""
-    # Read the source Info.plist into memory.
-    fd = open(source, 'r')
-    lines = fd.read()
-    fd.close()
-
+    with open(source, 'r') as fd:
+      lines = fd.read()
     # Go through all the environment variables and replace them as variables in
     # the file.
     for key in os.environ:
@@ -120,11 +115,8 @@ class MacTool(object):
       evar = '${%s}' % key
       lines = string.replace(lines, evar, os.environ[key])
 
-    # Write out the file with variables replaced.
-    fd = open(dest, 'w')
-    fd.write(lines)
-    fd.close()
-
+    with open(dest, 'w') as fd:
+      fd.write(lines)
     # Now write out PkgInfo file now that the Info.plist file has been
     # "compiled".
     self._WritePkgInfo(dest)
@@ -148,9 +140,8 @@ class MacTool(object):
       signature_code = '?' * 4
 
     dest = os.path.join(os.path.dirname(info_plist), 'PkgInfo')
-    fp = open(dest, 'w')
-    fp.write('%s%s' % (package_type, signature_code))
-    fp.close()
+    with open(dest, 'w') as fp:
+      fp.write(f'{package_type}{signature_code}')
 
   def ExecFlock(self, lockfile, *cmd_list):
     """Emulates the most basic behavior of Linux's flock(1)."""

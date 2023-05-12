@@ -93,7 +93,7 @@ class WebIDLCodegenManagerState(dict):
 
         state = json.load(fh)
         if state['version'] != self.VERSION:
-            raise Exception('Unknown state version: %s' % state['version'])
+            raise Exception(f"Unknown state version: {state['version']}")
 
         self['version'] = state['version']
         self['global_depends'] = state['global_depends']
@@ -349,7 +349,7 @@ class WebIDLCodegenManager(LoggingMixin):
                 code = root.define()
                 output_root = self._codegen_dir
             else:
-                raise Exception('Unknown global gen type: %s' % what)
+                raise Exception(f'Unknown global gen type: {what}')
 
             output_path = mozpath.join(output_root, filename)
             self._maybe_write_file(output_path, code, result)
@@ -415,7 +415,7 @@ class WebIDLCodegenManager(LoggingMixin):
         """
         basename = mozpath.basename(p)
         stem = mozpath.splitext(basename)[0]
-        binding_stem = '%sBinding' % stem
+        binding_stem = f'{stem}Binding'
 
         if stem in self._exported_stems:
             header_dir = self._exported_header_dir
@@ -425,26 +425,25 @@ class WebIDLCodegenManager(LoggingMixin):
         is_event = stem in self._generated_events_stems
 
         files = (
-            mozpath.join(header_dir, '%s.h' % binding_stem),
-            mozpath.join(self._codegen_dir, '%s.cpp' % binding_stem),
-            mozpath.join(header_dir, '%s.h' % stem) if is_event else None,
-            mozpath.join(self._codegen_dir, '%s.cpp' % stem) if is_event else None,
+            mozpath.join(header_dir, f'{binding_stem}.h'),
+            mozpath.join(self._codegen_dir, f'{binding_stem}.cpp'),
+            mozpath.join(header_dir, f'{stem}.h') if is_event else None,
+            mozpath.join(self._codegen_dir, f'{stem}.cpp') if is_event else None,
         )
 
         return stem, binding_stem, is_event, header_dir, files
 
     def _example_paths(self, interface):
-        return (
-            mozpath.join(self._codegen_dir, '%s-example.h' % interface),
-            mozpath.join(self._codegen_dir, '%s-example.cpp' % interface))
+        return mozpath.join(
+            self._codegen_dir, f'{interface}-example.h'
+        ), mozpath.join(self._codegen_dir, f'{interface}-example.cpp')
 
     def expected_build_output_files(self):
         """Obtain the set of files generate_build_files() should write."""
-        paths = set()
-
-        # Account for global generation.
-        for p in self.GLOBAL_DECLARE_FILES:
-            paths.add(mozpath.join(self._exported_header_dir, p))
+        paths = {
+            mozpath.join(self._exported_header_dir, p)
+            for p in self.GLOBAL_DECLARE_FILES
+        }
         for p in self.GLOBAL_DEFINE_FILES:
             paths.add(mozpath.join(self._codegen_dir, p))
 
@@ -501,12 +500,14 @@ class WebIDLCodegenManager(LoggingMixin):
         if current_files ^ set(self._state['global_depends'].keys()):
             return True, current_hashes
 
-        # Compare hashes.
-        for f, sha1 in current_hashes.items():
-            if sha1 != self._state['global_depends'][f]:
-                return True, current_hashes
-
-        return False, current_hashes
+        return next(
+            (
+                (True, current_hashes)
+                for f, sha1 in current_hashes.items()
+                if sha1 != self._state['global_depends'][f]
+            ),
+            (False, current_hashes),
+        )
 
     def _save_state(self):
         with open(self._state_path, 'wb') as fh:

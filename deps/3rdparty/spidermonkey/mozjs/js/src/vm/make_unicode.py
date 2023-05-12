@@ -113,16 +113,8 @@ def generate_unicode_stuff(unicode_data, data_file, test_mapping, test_space):
         if category in ['Mn', 'Mc', 'Nd', 'Pc'] or code == ZWNJ or code == ZWJ: # $ 7.6 (IdentifierPart)
             flags |= FLAG_IDENTIFIER_PART
 
-        if uppercase:
-            upper = int(uppercase, 16)
-        else:
-            upper = code
-
-        if lowercase:
-            lower = int(lowercase, 16)
-        else:
-            lower = code
-
+        upper = int(uppercase, 16) if uppercase else code
+        lower = int(lowercase, 16) if lowercase else code
         test_table[code] = (upper, lower, name, alias)
 
         up_d = upper - code
@@ -151,10 +143,17 @@ def generate_unicode_stuff(unicode_data, data_file, test_mapping, test_space):
 
         if entry:
             upper, lower, name, alias = entry
-            test_mapping.write('  [' + hex(upper) + ', ' + hex(lower) + '], /* ' +
-                       name + (' (' + alias + ')' if alias else '') + ' */\n')
+            test_mapping.write(
+                (
+                    (
+                        f'  [{hex(upper)}, {hex(lower)}], /* {name}'
+                        + (f' ({alias})' if alias else '')
+                    )
+                    + ' */\n'
+                )
+            )
         else:
-            test_mapping.write('  [' + hex(code) + ', ' + hex(code) + '],\n')
+            test_mapping.write(f'  [{hex(code)}, {hex(code)}' + '],\n')
     test_mapping.write('];')
     test_mapping.write("""
 assertEq(mapping.length, 0x10000);
@@ -260,7 +259,7 @@ if (typeof reportCompare === "function")
     data_file.write('\n')
 
     def dump(data, name, file):
-        file.write('const uint8_t unicode::' + name + '[] = {\n')
+        file.write(f'const uint8_t unicode::{name}' + '[] = {\n')
 
         line = pad = ' ' * 4
         lines = []

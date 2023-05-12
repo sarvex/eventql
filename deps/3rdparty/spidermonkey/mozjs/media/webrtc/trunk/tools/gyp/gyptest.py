@@ -51,13 +51,8 @@ class CommandRunner:
     if type(command) == type(()):
       func = command[0]
       args = command[1:]
-      s = '%s(%s)' % (func.__name__, ', '.join(map(repr, args)))
-    if type(command) == type([]):
-      # TODO:  quote arguments containing spaces
-      # TODO:  handle meta characters?
-      s = ' '.join(command)
-    else:
-      s = self.subst(command)
+      s = f"{func.__name__}({', '.join(map(repr, args))})"
+    s = ' '.join(command) if type(command) == type([]) else self.subst(command)
     if not s.endswith('\n'):
       s += '\n'
     sys.stdout.write(s)
@@ -79,12 +74,7 @@ class CommandRunner:
       args = command[1:]
       return func(*args)
     else:
-      if stdout is sys.stdout:
-        # Same as passing sys.stdout, except python2.4 doesn't fail on it.
-        subout = None
-      else:
-        # Open pipe for anything else so Popen works on python2.4.
-        subout = subprocess.PIPE
+      subout = None if stdout is sys.stdout else subprocess.PIPE
       if stderr is sys.stderr:
         # Same as passing sys.stderr, except python2.4 doesn't fail on it.
         suberr = None

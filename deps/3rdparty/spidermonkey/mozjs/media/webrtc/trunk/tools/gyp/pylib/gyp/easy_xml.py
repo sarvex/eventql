@@ -45,7 +45,7 @@ def XmlToString(content, encoding='utf-8', pretty=False):
     The XML content as a string.
   """
   # We create a huge list of all the elements of the file.
-  xml_parts = ['<?xml version="1.0" encoding="%s"?>' % encoding]
+  xml_parts = [f'<?xml version="1.0" encoding="{encoding}"?>']
   if pretty:
     xml_parts.append('\n')
   _ConstructContentList(xml_parts, content, pretty)
@@ -74,7 +74,7 @@ def _ConstructContentList(xml_parts, specification, pretty, level=0):
   if not isinstance(name, str):
     raise Exception('The first item of an EasyXml specification should be '
                     'a string.  Specification was ' + str(specification))
-  xml_parts.append(indentation + '<' + name)
+  xml_parts.append(f'{indentation}<{name}')
 
   # Optionally in second position is a dictionary of the attributes.
   rest = specification[1:]
@@ -97,9 +97,9 @@ def _ConstructContentList(xml_parts, specification, pretty, level=0):
         _ConstructContentList(xml_parts, child_spec, pretty, level + 1)
     if multi_line and indentation:
       xml_parts.append(indentation)
-    xml_parts.append('</%s>%s' % (name, new_line))
+    xml_parts.append(f'</{name}>{new_line}')
   else:
-    xml_parts.append('/>%s' % new_line)
+    xml_parts.append(f'/>{new_line}')
 
 
 def WriteXmlIfChanged(content, path, encoding='utf-8', pretty=False,
@@ -118,17 +118,15 @@ def WriteXmlIfChanged(content, path, encoding='utf-8', pretty=False,
 
   # Get the old content
   try:
-    f = open(path, 'r')
-    existing = f.read()
-    f.close()
+    with open(path, 'r') as f:
+      existing = f.read()
   except:
     existing = None
 
   # It has changed, write it
   if existing != xml_string:
-    f = open(path, 'w')
-    f.write(xml_string)
-    f.close()
+    with open(path, 'w') as f:
+      f.write(xml_string)
 
 
 _xml_escape_map = {
@@ -143,7 +141,7 @@ _xml_escape_map = {
 
 
 _xml_escape_re = re.compile(
-    "(%s)" % "|".join(map(re.escape, _xml_escape_map.keys())))
+    f'({"|".join(map(re.escape, _xml_escape_map.keys()))})')
 
 
 def _XmlEscape(value, attr=False):
@@ -151,7 +149,6 @@ def _XmlEscape(value, attr=False):
   def replace(match):
     m = match.string[match.start() : match.end()]
     # don't replace single quotes in attrs
-    if attr and m == "'":
-      return m
-    return _xml_escape_map[m]
+    return m if attr and m == "'" else _xml_escape_map[m]
+
   return _xml_escape_re.sub(replace, value)

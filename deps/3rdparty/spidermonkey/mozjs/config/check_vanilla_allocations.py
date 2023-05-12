@@ -124,21 +124,21 @@ def main():
         if m is None:
             continue
 
-        fn = m.group(1)
-        filename = m.group(2)
-        linenum = m.group(3)
+        fn = m[1]
+        filename = m[2]
+        linenum = m[3]
         if filename == 'jsutil.cpp':
             jsutil_cpp.add(fn)
         else:
             # An allocation is present in a non-special file.  Fail!
-            fail("'" + fn + "' present at " + filename + ':' + linenum)
+            fail(f"'{fn}' present at {filename}:{linenum}")
 
 
     # Check that all functions we expect are used in jsutil.cpp.  (This will
     # fail if the function-detection code breaks at any point.)
     for fn in alloc_fns_unescaped:
         if fn not in jsutil_cpp:
-            fail("'" + fn + "' isn't used as expected in jsutil.cpp")
+            fail(f"'{fn}' isn't used as expected in jsutil.cpp")
         else:
             jsutil_cpp.remove(fn)
 

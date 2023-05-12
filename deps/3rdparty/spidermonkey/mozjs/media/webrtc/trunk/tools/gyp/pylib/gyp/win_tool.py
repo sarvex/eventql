@@ -42,8 +42,7 @@ class LinkLock(object):
     # 0x80 means another process was killed without releasing the mutex, but
     # that this process has been given ownership. This is fine for our
     # purposes.
-    assert result in (0, 0x80), (
-        "%s, %s" % (result, windll.kernel32.GetLastError()))
+    assert result in (0, 0x80), f"{result}, {windll.kernel32.GetLastError()}"
 
   def __exit__(self, type, value, traceback):
     windll.kernel32.ReleaseMutex(self.mutex)
@@ -59,7 +58,7 @@ class WinTool(object):
     if len(args) < 1:
       raise Exception("Not enough arguments")
 
-    method = "Exec%s" % self._CommandifyName(args[0])
+    method = f"Exec{self._CommandifyName(args[0])}"
     return getattr(self, method)(*args[1:])
 
   def _CommandifyName(self, name_string):

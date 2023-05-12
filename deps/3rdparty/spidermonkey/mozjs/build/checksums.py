@@ -24,7 +24,7 @@ def digest_file(filename, digest, chunk_size=1024):
     assert not os.path.isdir(filename), 'this function only works with files'
     logger = logging.getLogger('checksums.py')
     if hashlib is not None:
-        logger.debug('Creating new %s object' % digest)
+        logger.debug(f'Creating new {digest} object')
         h = hashlib.new(digest)
         with open(filename, 'rb') as f:
             while True:
@@ -34,7 +34,7 @@ def digest_file(filename, digest, chunk_size=1024):
                     break
                 h.update(data)
         hash = h.hexdigest()
-        logger.debug('Hash for %s is %s' % (filename, hash))
+        logger.debug(f'Hash for {filename} is {hash}')
         return hash
     else:
         # In this case we could subprocess.Popen and .communicate with

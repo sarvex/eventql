@@ -17,6 +17,7 @@ still result in a few indexer issues here and there.
 This generator has no automated tests, so expect it to be broken.
 """
 
+
 from xml.sax.saxutils import escape
 import os.path
 import subprocess
@@ -27,12 +28,14 @@ import shlex
 generator_wants_static_library_dependencies_adjusted = False
 
 generator_default_variables = {
+    dirname: 'dir'
+    for dirname in [
+        'INTERMEDIATE_DIR',
+        'PRODUCT_DIR',
+        'LIB_DIR',
+        'SHARED_LIB_DIR',
+    ]
 }
-
-for dirname in ['INTERMEDIATE_DIR', 'PRODUCT_DIR', 'LIB_DIR', 'SHARED_LIB_DIR']:
-  # Some gyp steps fail if these are empty(!).
-  generator_default_variables[dirname] = 'dir'
-
 for unused in ['RULE_INPUT_PATH', 'RULE_INPUT_ROOT', 'RULE_INPUT_NAME',
                'RULE_INPUT_DIRNAME', 'RULE_INPUT_EXT',
                'EXECUTABLE_PREFIX', 'EXECUTABLE_SUFFIX',
@@ -90,7 +93,7 @@ def GetAllIncludeDirectories(target_list, target_dicts,
         include_dir = ''
         if cflag.startswith('-I'):
           include_dir = cflag[2:]
-        if include_dir and not include_dir in compiler_includes_list:
+        if include_dir and include_dir not in compiler_includes_list:
           compiler_includes_list.append(include_dir)
 
       # Find standard gyp include dirs.
@@ -102,18 +105,16 @@ def GetAllIncludeDirectories(target_list, target_dicts,
           if not os.path.isabs(include_dir):
             base_dir = os.path.dirname(target_name)
 
-            include_dir = base_dir + '/' + include_dir
+            include_dir = f'{base_dir}/{include_dir}'
             include_dir = os.path.abspath(include_dir)
 
-          if not include_dir in gyp_includes_set:
+          if include_dir not in gyp_includes_set:
             gyp_includes_set.add(include_dir)
 
 
-  # Generate a list that has all the include dirs.
-  all_includes_list = list(gyp_includes_set)
-  all_includes_list.sort()
+  all_includes_list = sorted(gyp_includes_set)
   for compiler_include in compiler_includes_list:
-    if not compiler_include in gyp_includes_set:
+    if compiler_include not in gyp_includes_set:
       all_includes_list.append(compiler_include)
 
   # All done.
@@ -138,8 +139,7 @@ def GetCompilerPath(target_list, target_dicts, data):
 
   # Check to see if the compiler was specified as an environment variable.
   for key in ['CC_target', 'CC', 'CXX']:
-    compiler = os.environ.get(key)
-    if compiler:
+    if compiler := os.environ.get(key):
       return compiler
 
   return 'gcc'
@@ -170,9 +170,7 @@ def GetAllDefines(target_list, target_dicts, data, config_name):
 
         all_defines[split_define[0].strip()] = split_define[1].strip()
 
-  # Get default compiler defines (if possible).
-  cc_target = GetCompilerPath(target_list, target_dicts, data)
-  if cc_target:
+  if cc_target := GetCompilerPath(target_list, target_dicts, data):
     command = shlex.split(cc_target)
     command.extend(['-E', '-dM', '-'])
     cpp_proc = subprocess.Popen(args=command, cwd='.',
@@ -184,10 +182,7 @@ def GetAllDefines(target_list, target_dicts, data, config_name):
         continue
       cpp_line_parts = cpp_line.split(' ', 2)
       key = cpp_line_parts[1]
-      if len(cpp_line_parts) >= 3:
-        val = cpp_line_parts[2]
-      else:
-        val = '1'
+      val = cpp_line_parts[2] if len(cpp_line_parts) >= 3 else '1'
       all_defines[key] = val
 
   return all_defines
@@ -238,21 +233,19 @@ def GenerateOutputForConfig(target_list, target_dicts, data, params,
 
   if not os.path.exists(toplevel_build):
     os.makedirs(toplevel_build)
-  out = open(os.path.join(toplevel_build, 'eclipse-cdt-settings.xml'), 'w')
+  with open(os.path.join(toplevel_build, 'eclipse-cdt-settings.xml'), 'w') as out:
+    out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+    out.write('<cdtprojectproperties>\n')
 
-  out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-  out.write('<cdtprojectproperties>\n')
+    eclipse_langs = ['C++ Source File', 'C Source File', 'Assembly Source File',
+                     'GNU C++', 'GNU C', 'Assembly']
+    include_dirs = GetAllIncludeDirectories(target_list, target_dicts,
+                                            shared_intermediate_dir, config_name)
+    WriteIncludePaths(out, eclipse_langs, include_dirs)
+    defines = GetAllDefines(target_list, target_dicts, data, config_name)
+    WriteMacros(out, eclipse_langs, defines)
 
-  eclipse_langs = ['C++ Source File', 'C Source File', 'Assembly Source File',
-                   'GNU C++', 'GNU C', 'Assembly']
-  include_dirs = GetAllIncludeDirectories(target_list, target_dicts,
-                                          shared_intermediate_dir, config_name)
-  WriteIncludePaths(out, eclipse_langs, include_dirs)
-  defines = GetAllDefines(target_list, target_dicts, data, config_name)
-  WriteMacros(out, eclipse_langs, defines)
-
-  out.write('</cdtprojectproperties>\n')
-  out.close()
+    out.write('</cdtprojectproperties>\n')
 
 
 def GenerateOutput(target_list, target_dicts, data, params):
@@ -261,8 +254,7 @@ def GenerateOutput(target_list, target_dicts, data, params):
   if params['options'].generator_output:
     raise NotImplementedError, "--generator_output not implemented for eclipse"
 
-  user_config = params.get('generator_flags', {}).get('config', None)
-  if user_config:
+  if user_config := params.get('generator_flags', {}).get('config', None):
     GenerateOutputForConfig(target_list, target_dicts, data, params,
                             user_config)
   else:

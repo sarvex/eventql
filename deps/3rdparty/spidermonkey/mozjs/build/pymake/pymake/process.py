@@ -28,7 +28,9 @@ def tokens2re(tokens):
     # which matches the pattern and captures it in a named match group.
     # The group names and patterns come are given as a dict in the function
     # argument.
-    nonescaped = r'(?<!\\)(?:%s)' % '|'.join('(?P<%s>%s)' % (name, value) for name, value in tokens.iteritems())
+    nonescaped = r'(?<!\\)(?:%s)' % '|'.join(
+        f'(?P<{name}>{value})' for name, value in tokens.iteritems()
+    )
     # The final pattern matches either the above pattern, or an escaped
     # backslash, captured in the "escape" match group.
     return re.compile('(?:%s|%s)' % (nonescaped, r'(?P<escape>\\\\)'))
@@ -85,13 +87,12 @@ class ClineSplitter(list):
                 path = self.arg
             else:
                 path = os.path.join(self.cwd, self.arg)
-            globbed = glob.glob(path)
-            if not globbed:
+            if globbed := glob.glob(path):
+                self.extend(f[len(path)-len(self.arg):] for f in globbed)
+            else:
                 # If globbing doesn't find anything, the literal string is
                 # used.
                 self.append(self.arg)
-            else:
-                self.extend(f[len(path)-len(self.arg):] for f in globbed)
             self.glob = False
         else:
             self.append(self.arg)
@@ -230,9 +231,9 @@ def prepare_command(cline, cwd, loc):
     else:
         argv, badchar = clinetoargv(cline, cwd)
         if argv is None:
-            shellreason = "command contains shell-special character '%s'" % (badchar,)
+            shellreason = f"command contains shell-special character '{badchar}'"
         elif len(argv) and argv[0] in shellwords:
-            shellreason = "command starts with shell primitive '%s'" % (argv[0],)
+            shellreason = f"command starts with shell primitive '{argv[0]}'"
         elif argv and (os.sep in argv[0] or os.altsep and os.altsep in argv[0]):
             executable = util.normaljoin(cwd, argv[0])
             # Avoid "%1 is not a valid Win32 application" errors, assuming
@@ -243,9 +244,8 @@ def prepare_command(cline, cwd, loc):
 
     if shellreason is not None:
         _log.debug("%s: using shell: %s: '%s'", loc, shellreason, cline)
-        if msys:
-            if len(cline) > 3 and cline[1] == ':' and cline[2] == '/':
-                cline = '/' + cline[0] + cline[2:]
+        if msys and len(cline) > 3 and cline[1] == ':' and cline[2] == '/':
+            cline = f'/{cline[0]}{cline[2:]}'
         argv = [shell, "-c", cline]
         executable = None
 
@@ -262,8 +262,10 @@ def call(cline, env, cwd, loc, cb, context, echo, justprint=False):
         command.main(argv[1:], env, cwd, cb)
         return
 
-    if argv[0:2] == [sys.executable.replace('\\', '/'),
-                     command.makepypath.replace('\\', '/')]:
+    if argv[:2] == [
+        sys.executable.replace('\\', '/'),
+        command.makepypath.replace('\\', '/'),
+    ]:
         command.main(argv[2:], env, cwd, cb)
         return
 
@@ -279,11 +281,7 @@ def statustoresult(status):
     """
     Convert the status returned from waitpid into a prettier numeric result.
     """
-    sig = status & 0xFF
-    if sig:
-        return -sig
-
-    return status >>8
+    return -sig if (sig := status & 0xFF) else status >>8
 
 class Job(object):
     """
@@ -525,8 +523,9 @@ class ParallelContext(object):
             for c in clist:
                 c.run()
 
-            dowait = util.any((len(c.running) for c in ParallelContext._allcontexts))
-            if dowait:
+            if dowait := util.any(
+                (len(c.running) for c in ParallelContext._allcontexts)
+            ):
                 # Wait on local jobs first for perf
                 for job, cb in ParallelContext._waitany(ParallelContext._condition):
                     cb(job.exitcode)

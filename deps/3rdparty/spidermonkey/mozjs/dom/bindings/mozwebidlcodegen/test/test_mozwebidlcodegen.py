@@ -41,10 +41,11 @@ class TestWebIDLCodegenManager(unittest.TestCase):
 
     @property
     def _static_input_paths(self):
-        s = {mozpath.join(OUR_DIR, p) for p in os.listdir(OUR_DIR)
-            if p.endswith('.webidl')}
-
-        return s
+        return {
+            mozpath.join(OUR_DIR, p)
+            for p in os.listdir(OUR_DIR)
+            if p.endswith('.webidl')
+        }
 
     @property
     def _config_path(self):
@@ -122,10 +123,16 @@ class TestWebIDLCodegenManager(unittest.TestCase):
             self.assertIn(mozpath.join(manager._codegen_dir, f), output)
 
         for s in self.TEST_STEMS:
-            self.assertTrue(os.path.isfile(mozpath.join(
-                manager._exported_header_dir, '%sBinding.h' % s)))
-            self.assertTrue(os.path.isfile(mozpath.join(
-                manager._codegen_dir, '%sBinding.cpp' % s)))
+            self.assertTrue(
+                os.path.isfile(
+                    mozpath.join(manager._exported_header_dir, f'{s}Binding.h')
+                )
+            )
+            self.assertTrue(
+                os.path.isfile(
+                    mozpath.join(manager._codegen_dir, f'{s}Binding.cpp')
+                )
+            )
 
         self.assertTrue(os.path.isfile(manager._state_path))
 
@@ -188,19 +195,16 @@ class TestWebIDLCodegenManager(unittest.TestCase):
         m1 = WebIDLCodegenManager(**args)
         m1.generate_build_files()
 
-        child_path = None
-        for p in m1._input_paths:
-            if p.endswith('Child.webidl'):
-                child_path = p
-                break
-
+        child_path = next(
+            (p for p in m1._input_paths if p.endswith('Child.webidl')), None
+        )
         self.assertIsNotNone(child_path)
         child_content = open(child_path, 'rb').read()
 
         with MockedOpen({child_path: child_content + '\n/* */'}):
             m2 = WebIDLCodegenManager(**args)
             result = m2.generate_build_files()
-            self.assertEqual(result.inputs, set([child_path]))
+            self.assertEqual(result.inputs, {child_path})
             self.assertEqual(len(result.updated), 0)
             self.assertEqual(len(result.created), 0)
 
@@ -252,9 +256,7 @@ class TestWebIDLCodegenManager(unittest.TestCase):
                 old_exists = os.path.exists
                 try:
                     def exists(p):
-                        if p == fake_path:
-                            return True
-                        return old_exists(p)
+                        return True if p == fake_path else old_exists(p)
 
                     os.path.exists = exists
 
@@ -285,11 +287,9 @@ class TestWebIDLCodegenManager(unittest.TestCase):
         m1 = WebIDLCodegenManager(**args)
         m1.generate_build_files()
 
-        old_path = None
-        for p in args['inputs'][0]:
-            if p.endswith('Parent.webidl'):
-                old_path = p
-                break
+        old_path = next(
+            (p for p in args['inputs'][0] if p.endswith('Parent.webidl')), None
+        )
         self.assertIsNotNone(old_path)
 
         new_path = mozpath.join(args['cache_dir'], 'Parent.webidl')

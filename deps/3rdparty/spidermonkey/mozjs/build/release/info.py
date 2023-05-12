@@ -22,13 +22,21 @@ class ConfigError(Exception):
 
 def getBuildID(platform, product, version, buildNumber, nightlyDir='nightly',
                server='stage.mozilla.org'):
-    infoTxt = makeCandidatesDir(product, version, buildNumber, nightlyDir,
-                                protocol='http', server=server) + \
-        '%s_info.txt' % platform
+    infoTxt = (
+        makeCandidatesDir(
+            product,
+            version,
+            buildNumber,
+            nightlyDir,
+            protocol='http',
+            server=server,
+        )
+        + f'{platform}_info.txt'
+    )
     try:
         buildInfo = urlopen(infoTxt).read()
     except:
-        log.error("Failed to retrieve %s" % infoTxt)
+        log.error(f"Failed to retrieve {infoTxt}")
         raise
 
     for line in buildInfo.splitlines():
@@ -62,9 +70,9 @@ def getReleaseConfigName(product, branch, version=None, staging=False):
     if product == 'thunderbird' and 'esr17' in branch and version and 'esr' not in version:
         cfg = 'release-thunderbird-comm-release.py'
     else:
-        cfg = 'release-%s-%s.py' % (product, branch)
+        cfg = f'release-{product}-{branch}.py'
     if staging:
-        cfg = 'staging_%s' % cfg
+        cfg = f'staging_{cfg}'
     return cfg
 
 
@@ -95,7 +103,7 @@ def readConfig(configfile, keys=[], required=[]):
     for key in required:
         if key not in items:
             err = True
-            log.error("Required item `%s' missing from %s" % (key, c))
+            log.error(f"Required item `{key}' missing from {c}")
     if err:
         raise ConfigError("Missing at least one item in config, see above")
     return c
@@ -108,39 +116,37 @@ def isFinalRelease(version):
 def getBaseTag(product, version):
     product = product.upper()
     version = version.replace('.', '_')
-    return '%s_%s' % (product, version)
+    return f'{product}_{version}'
 
 
 def getTags(baseTag, buildNumber, buildTag=True):
-    t = ['%s_RELEASE' % baseTag]
+    t = [f'{baseTag}_RELEASE']
     if buildTag:
         t.append('%s_BUILD%d' % (baseTag, int(buildNumber)))
     return t
 
 
 def getRuntimeTag(tag):
-    return "%s_RUNTIME" % tag
+    return f"{tag}_RUNTIME"
 
 
 def getReleaseTag(tag):
-    return "%s_RELEASE" % tag
+    return f"{tag}_RELEASE"
 
 
 def generateRelbranchName(version, prefix='GECKO'):
-    return '%s%s_%s_RELBRANCH' % (
-        prefix, version.replace('.', ''),
-        datetime.now().strftime('%Y%m%d%H'))
+    return f"{prefix}{version.replace('.', '')}_{datetime.now().strftime('%Y%m%d%H')}_RELBRANCH"
 
 
 def getReleaseName(product, version, buildNumber):
-    return '%s-%s-build%s' % (product.title(), version, str(buildNumber))
+    return f'{product.title()}-{version}-build{str(buildNumber)}'
 
 
 def getRepoMatchingBranch(branch, sourceRepositories):
-    for sr in sourceRepositories.values():
-        if branch in sr['path']:
-            return sr
-    return None
+    return next(
+        (sr for sr in sourceRepositories.values() if branch in sr['path']),
+        None,
+    )
 
 
 def fileInfo(filepath, product):
@@ -161,18 +167,23 @@ def fileInfo(filepath, product):
         # Mozilla 1.9.0 style (aka 'short') paths
         # e.g. firefox-3.0.12.en-US.win32.complete.mar
         filename = os.path.basename(filepath)
-        m = re.match("^(%s)-([0-9.]+)\.([-a-zA-Z]+)\.(win32)\.(complete|installer)\.(mar|exe)$" % product, filename)
-        if not m:
-            raise ValueError("Could not parse: %s" % filename)
-        return {'product': m.group(1),
-                'version': m.group(2),
-                'locale': m.group(3),
-                'platform': m.group(4),
-                'contents': m.group(5),
-                'format': m.group(6),
+        if m := re.match(
+            "^(%s)-([0-9.]+)\.([-a-zA-Z]+)\.(win32)\.(complete|installer)\.(mar|exe)$"
+            % product,
+            filename,
+        ):
+            return {
+                'product': m[1],
+                'version': m[2],
+                'locale': m[3],
+                'platform': m[4],
+                'contents': m[5],
+                'format': m[6],
                 'pathstyle': 'short',
                 'leading_path': '',
-                }
+            }
+        else:
+            raise ValueError(f"Could not parse: {filename}")
     except:
         # Mozilla 1.9.1 and on style (aka 'long') paths
         # e.g. update/win32/en-US/firefox-3.5.1.complete.mar
@@ -182,12 +193,12 @@ def fileInfo(filepath, product):
             ret['format'] = 'mar'
             m = re.search("update/(win32|linux-i686|linux-x86_64|mac|mac64)/([-a-zA-Z]+)/(%s)-(\d+\.\d+(?:\.\d+)?(?:\w+(?:\d+)?)?)\.(complete)\.mar" % product, filepath)
             if not m:
-                raise ValueError("Could not parse: %s" % filepath)
-            ret['platform'] = m.group(1)
-            ret['locale'] = m.group(2)
-            ret['product'] = m.group(3)
-            ret['version'] = m.group(4)
-            ret['contents'] = m.group(5)
+                raise ValueError(f"Could not parse: {filepath}")
+            ret['platform'] = m[1]
+            ret['locale'] = m[2]
+            ret['product'] = m[3]
+            ret['version'] = m[4]
+            ret['contents'] = m[5]
             ret['leading_path'] = ''
         elif filepath.endswith('.exe'):
             ret['format'] = 'exe'
@@ -198,21 +209,21 @@ def fileInfo(filepath, product):
                 ret['platform'] = 'win32'
                 m = re.search("(win32-EUballot/)([-a-zA-Z]+)/((?i)%s) Setup (\d+\.\d+(?:\.\d+)?(?:\w+\d+)?(?:\ \w+\ \d+)?)\.exe" % product, filepath)
                 if not m:
-                    raise ValueError("Could not parse: %s" % filepath)
-                ret['leading_path'] = m.group(1)
-                ret['locale'] = m.group(2)
-                ret['product'] = m.group(3).lower()
-                ret['version'] = m.group(4)
+                    raise ValueError(f"Could not parse: {filepath}")
+                ret['leading_path'] = m[1]
+                ret['locale'] = m[2]
+                ret['product'] = m[3].lower()
+                ret['version'] = m[4]
             else:
                 m = re.search("(partner-repacks/[-a-zA-Z0-9_]+/|)(win32|mac|linux-i686)/([-a-zA-Z]+)/((?i)%s) Setup (\d+\.\d+(?:\.\d+)?(?:\w+(?:\d+)?)?(?:\ \w+\ \d+)?)\.exe" % product, filepath)
                 if not m:
-                    raise ValueError("Could not parse: %s" % filepath)
-                ret['leading_path'] = m.group(1)
-                ret['platform'] = m.group(2)
-                ret['locale'] = m.group(3)
-                ret['product'] = m.group(4).lower()
-                ret['version'] = m.group(5)
+                    raise ValueError(f"Could not parse: {filepath}")
+                ret['leading_path'] = m[1]
+                ret['platform'] = m[2]
+                ret['locale'] = m[3]
+                ret['product'] = m[4].lower()
+                ret['version'] = m[5]
         else:
-            raise ValueError("Unknown filetype for %s" % filepath)
+            raise ValueError(f"Unknown filetype for {filepath}")
 
         return ret

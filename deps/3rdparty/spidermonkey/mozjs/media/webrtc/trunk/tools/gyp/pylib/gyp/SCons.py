@@ -40,14 +40,12 @@ class TargetBase(object):
         product_extension).
     """
     suffix = self.target_suffix
-    product_extension = self.spec.get('product_extension')
-    if product_extension:
-      suffix = '.' + product_extension
+    if product_extension := self.spec.get('product_extension'):
+      suffix = f'.{product_extension}'
     prefix = self.spec.get('product_prefix', self.target_prefix)
     name = self.spec['target_name']
     name = prefix + self.spec.get('product_name', name) + suffix
-    product_dir = self.spec.get('product_dir')
-    if product_dir:
+    if product_dir := self.spec.get('product_dir'):
       name = os.path.join(product_dir, name)
     else:
       name = os.path.join(self.out_dir, name)

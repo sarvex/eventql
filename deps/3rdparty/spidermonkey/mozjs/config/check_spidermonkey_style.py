@@ -56,49 +56,49 @@ ignored_js_src_dirs = [
 ]
 
 # We ignore #includes of these files, because they don't follow the usual rules.
-included_inclnames_to_ignore = set([
-    'ffi.h',                    # generated in ctypes/libffi/
-    'devtools/sharkctl.h',      # we ignore devtools/ in general
-    'devtools/Instruments.h',   # we ignore devtools/ in general
-    'double-conversion.h',      # strange MFBT case
-    'javascript-trace.h',       # generated in $OBJDIR if HAVE_DTRACE is defined
-    'jsautokw.h',               # generated in $OBJDIR
-    'jscustomallocator.h',      # provided by embedders;  allowed to be missing
-    'js-config.h',              # generated in $OBJDIR
-    'pratom.h',                 # NSPR
-    'prcvar.h',                 # NSPR
-    'prinit.h',                 # NSPR
-    'prlink.h',                 # NSPR
-    'prlock.h',                 # NSPR
-    'prprf.h',                  # NSPR
-    'prthread.h',               # NSPR
-    'prtypes.h',                # NSPR
-    'selfhosted.out.h',         # generated in $OBJDIR
-    'unicode/locid.h',          # ICU
-    'unicode/numsys.h',         # ICU
-    'unicode/ucal.h',           # ICU
-    'unicode/uclean.h',         # ICU
-    'unicode/ucol.h',           # ICU
-    'unicode/udat.h',           # ICU
-    'unicode/udatpg.h',         # ICU
-    'unicode/uenum.h',          # ICU
-    'unicode/unorm.h',          # ICU
-    'unicode/unum.h',           # ICU
-    'unicode/ustring.h',        # ICU
-    'unicode/utypes.h',         # ICU
-    'vtune/VTuneWrapper.h'      # VTune
-])
+included_inclnames_to_ignore = {
+    'ffi.h',
+    'devtools/sharkctl.h',
+    'devtools/Instruments.h',
+    'double-conversion.h',
+    'javascript-trace.h',
+    'jsautokw.h',
+    'jscustomallocator.h',
+    'js-config.h',
+    'pratom.h',
+    'prcvar.h',
+    'prinit.h',
+    'prlink.h',
+    'prlock.h',
+    'prprf.h',
+    'prthread.h',
+    'prtypes.h',
+    'selfhosted.out.h',
+    'unicode/locid.h',
+    'unicode/numsys.h',
+    'unicode/ucal.h',
+    'unicode/uclean.h',
+    'unicode/ucol.h',
+    'unicode/udat.h',
+    'unicode/udatpg.h',
+    'unicode/uenum.h',
+    'unicode/unorm.h',
+    'unicode/unum.h',
+    'unicode/ustring.h',
+    'unicode/utypes.h',
+    'vtune/VTuneWrapper.h',
+}
 
 # These files have additional constraints on where they are #included, so we
 # ignore #includes of them when checking #include ordering.
-oddly_ordered_inclnames = set([
-    'ctypes/typedefs.h',        # Included multiple times in the body of ctypes/CTypes.h
-    'jsautokw.h',               # Included in the body of frontend/TokenStream.h
-    'jswin.h',                  # Must be #included before <psapi.h>
-    'machine/endian.h',         # Must be included after <sys/types.h> on BSD
-    'winbase.h',                # Must precede other system headers(?)
-    'windef.h'                  # Must precede other system headers(?)
-])
+oddly_ordered_inclnames = {
+    'ctypes/typedefs.h',
+    'jsautokw.h',
+    'jswin.h',
+    'machine/endian.h',
+    'winbase.h',
+    'windef.h',
+}
 
 # The files in tests/style/ contain code that fails this checking in various
 # ways.  Here is the output we expect.  If the actual output differs from
@@ -178,10 +178,10 @@ def out(*lines):
 def error(filename, linenum, *lines):
     location = filename
     if linenum is not None:
-        location += ':' + str(linenum)
-    out(location + ': error:')
-    for line in (lines):
-        out('    ' + line)
+        location += f':{str(linenum)}'
+    out(f'{location}: error:')
+    for line in lines:
+        out(f'    {line}')
     out('')
 
 
@@ -221,9 +221,9 @@ def get_all_filenames():
     cmds = [['hg', 'manifest', '-q'], ['git', 'ls-files', '--full-name', '../..']]
     for cmd in cmds:
         try:
-            all_filenames = subprocess.check_output(cmd, universal_newlines=True,
-                                                    stderr=subprocess.PIPE).split('\n')
-            return all_filenames
+            return subprocess.check_output(
+                cmd, universal_newlines=True, stderr=subprocess.PIPE
+            ).split('\n')
         except:
             continue
     else:
@@ -242,7 +242,7 @@ def check_style():
     # - "js/src/vm/String.h"    -> "vm/String.h"
 
     mfbt_inclnames = set()      # type: set(inclname)
-    js_names = dict()           # type: dict(filename, inclname)
+    js_names = {}
 
     # Select the appropriate files.
     for filename in get_all_filenames():
@@ -262,19 +262,12 @@ def check_style():
 
     all_inclnames = mfbt_inclnames | set(js_names.values())
 
-    edges = dict()      # type: dict(inclname, set(inclname))
-
-    # We don't care what's inside the MFBT files, but because they are
-    # #included from JS files we have to add them to the inclusion graph.
-    for inclname in mfbt_inclnames:
-        edges[inclname] = set()
-
+    edges = {inclname: set() for inclname in mfbt_inclnames}
     # Process all the JS files.
-    for filename in js_names.keys():
+    for filename in js_names:
         inclname = js_names[filename]
         file_kind = FileKind.get(filename)
-        if file_kind == FileKind.C or file_kind == FileKind.CPP or \
-           file_kind == FileKind.H or file_kind == FileKind.INL_H:
+        if file_kind in [FileKind.C, FileKind.CPP, FileKind.H, FileKind.INL_H]:
             included_h_inclnames = set()    # type: set(inclname)
 
             # This script is run in js/src/, so prepend '../../' to get to the root of the Mozilla
@@ -316,10 +309,7 @@ def is_module_header(enclosing_inclname, header_inclname):
 
     # A public header, e.g. module == "foo/Bar", header_inclname == "js/Bar.h".
     m = re.match(r'js\/(.*)\.h', header_inclname)
-    if m is not None and module.endswith('/' + m.group(1)):
-        return True
-
-    return False
+    return bool(m is not None and module.endswith(f'/{m[1]}'))
 
 
 class Include(object):
@@ -362,21 +352,11 @@ class Include(object):
             if self.inclname.startswith('mozilla/'):
                 return 1
 
-            if self.inclname.endswith('-inl.h'):
-                return 6
-
-            return 4
-
-        if self.inclname.endswith('inlines.h'):
-            return 5
-
-        return 3
+            return 6 if self.inclname.endswith('-inl.h') else 4
+        return 5 if self.inclname.endswith('inlines.h') else 3
 
     def quote(self):
-        if self.is_system:
-            return '<' + self.inclname + '>'
-        else:
-            return '"' + self.inclname + '"'
+        return f'<{self.inclname}>' if self.is_system else f'"{self.inclname}"'
 
 
 class HashIfBlock(object):
@@ -401,18 +381,18 @@ def do_file(filename, inclname, file_kind, f, all_inclnames, included_h_inclname
     # Extract the #include statements as a tree of IBlocks and IIncludes.
     for linenum, line in enumerate(f, start=1):
         # We're only interested in lines that contain a '#'.
-        if not '#' in line:
+        if '#' not in line:
             continue
 
         # Look for a |#include "..."| line.
         m = re.match(r'\s*#\s*include\s+"([^"]*)"', line)
         if m is not None:
-            block_stack[-1].kids.append(Include(m.group(1), linenum, False))
+            block_stack[-1].kids.append(Include(m[1], linenum, False))
 
         # Look for a |#include <...>| line.
         m = re.match(r'\s*#\s*include\s+<([^>]*)>', line)
         if m is not None:
-            block_stack[-1].kids.append(Include(m.group(1), linenum, True))
+            block_stack[-1].kids.append(Include(m[1], linenum, True))
 
         # Look for a |#{if,ifdef,ifndef}| line.
         m = re.match(r'\s*#\s*(if|ifdef|ifndef)\b', line)
@@ -444,9 +424,12 @@ def do_file(filename, inclname, file_kind, f, all_inclnames, included_h_inclname
             # Check it is not a known local file (in which case it's probably a system header).
             if include.inclname in included_inclnames_to_ignore or \
                include.inclname in all_inclnames:
-                error(filename, include.linenum,
-                      include.quote() + ' should be included using',
-                      'the #include "..." form')
+                error(
+                    filename,
+                    include.linenum,
+                    f'{include.quote()} should be included using',
+                    'the #include "..." form',
+                )
 
         else:
             if include.inclname not in included_inclnames_to_ignore:
@@ -454,19 +437,23 @@ def do_file(filename, inclname, file_kind, f, all_inclnames, included_h_inclname
 
                 # Check the #include path has the correct form.
                 if include.inclname not in all_inclnames:
-                    error(filename, include.linenum,
-                          include.quote() + ' is included using the wrong path;',
-                          'did you forget a prefix, or is the file not yet committed?')
+                    error(
+                        filename,
+                        include.linenum,
+                        f'{include.quote()} is included using the wrong path;',
+                        'did you forget a prefix, or is the file not yet committed?',
+                    )
 
-                # Record inclusions of .h files for cycle detection later.
-                # (Exclude .tbl and .msg files.)
-                elif included_kind == FileKind.H or included_kind == FileKind.INL_H:
+                elif included_kind in [FileKind.H, FileKind.INL_H]:
                     included_h_inclnames.add(include.inclname)
 
                 # Check a H file doesn't #include an INL_H file.
                 if file_kind == FileKind.H and included_kind == FileKind.INL_H:
-                    error(filename, include.linenum,
-                          'vanilla header includes an inline-header file ' + include.quote())
+                    error(
+                        filename,
+                        include.linenum,
+                        f'vanilla header includes an inline-header file {include.quote()}',
+                    )
 
                 # Check a file doesn't #include itself.  (We do this here because the cycle
                 # detection below doesn't detect this case.)
@@ -484,8 +471,11 @@ def do_file(filename, inclname, file_kind, f, all_inclnames, included_h_inclname
         section2 = include2.section(inclname)
         if (section1 > section2) or \
            ((section1 == section2) and (include1.inclname.lower() > include2.inclname.lower())):
-            error(filename, str(include1.linenum) + ':' + str(include2.linenum),
-                  include1.quote() + ' should be included after ' + include2.quote())
+            error(
+                filename,
+                f'{str(include1.linenum)}:{str(include2.linenum)}',
+                f'{include1.quote()} should be included after {include2.quote()}',
+            )
 
     # Check the extracted #include statements, both individually, and the ordering of
     # adjacent pairs that live in the same block.
@@ -495,7 +485,7 @@ def do_file(filename, inclname, file_kind, f, all_inclnames, included_h_inclname
             if prev is not None and prev.isLeaf():
                 check_includes_order(prev, this)
         else:
-            for prev2, this2 in zip([None] + this.kids[0:-1], this.kids):
+            for prev2, this2 in zip([None] + this.kids[:-1], this.kids):
                 pair_traverse(prev2, this2)
 
     pair_traverse(None, block_stack[-1])

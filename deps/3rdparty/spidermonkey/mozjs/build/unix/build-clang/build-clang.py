@@ -36,8 +36,7 @@ def build_package(package_source_dir, package_build_dir, configure_args,
                   make_args):
     if not os.path.exists(package_build_dir):
         os.mkdir(package_build_dir)
-    run_in(package_build_dir,
-           ["%s/configure" % package_source_dir] + configure_args)
+    run_in(package_build_dir, [f"{package_source_dir}/configure"] + configure_args)
     run_in(package_build_dir, ["make", "-j4"] + make_args)
     run_in(package_build_dir, ["make", "install"])
 
@@ -47,7 +46,7 @@ def with_env(env, f):
     os.environ.update(env)
     f()
     os.environ.clear()
-    os.environ.update(old_env)
+    os.environ |= old_env
 
 
 def build_tar_package(tar, name, base, directory):
@@ -67,13 +66,13 @@ def build_one_stage(env, stage_dir, llvm_source_dir, gcc_toolchain_dir):
 
 def build_tooltool_manifest(llvm_revision):
     basedir = os.path.split(os.path.realpath(sys.argv[0]))[0]
-    tooltool = basedir + '/tooltool.py'
-    setup = basedir + '/setup.sh'
+    tooltool = f'{basedir}/tooltool.py'
+    setup = f'{basedir}/setup.sh'
     manifest = 'clang.manifest'
     check_run(['python', tooltool, '-m', manifest, 'add',
                setup, 'clang.tar.bz2'])
     data = json.load(file(manifest), object_pairs_hook=collections.OrderedDict)
-    data = [{'clang_version': 'r%s' % llvm_revision}] + data
+    data = [{'clang_version': f'r{llvm_revision}'}] + data
     out = file(manifest, 'w')
     json.dump(data, out, indent=0)
     out.write('\n')
@@ -87,10 +86,7 @@ def get_platform():
     if p == "Darwin":
         return "macosx64"
     elif p == "Linux":
-        if platform.processor() == "x86_64":
-            return "linux64"
-        else:
-            return "linux32"
+        return "linux64" if platform.processor() == "x86_64" else "linux32"
     else:
         raise NotImplementedError("Not supported platform")
 
@@ -102,8 +98,8 @@ def is_darwin():
 def build_one_stage_aux(stage_dir, llvm_source_dir, gcc_toolchain_dir):
     os.mkdir(stage_dir)
 
-    build_dir = stage_dir + "/build"
-    inst_dir = stage_dir + "/clang"
+    build_dir = f"{stage_dir}/build"
+    inst_dir = f"{stage_dir}/clang"
 
     targets = ["x86", "x86_64"]
     # The Darwin equivalents of binutils appear to have intermittent problems
@@ -113,12 +109,14 @@ def build_one_stage_aux(stage_dir, llvm_source_dir, gcc_toolchain_dir):
     if not is_darwin():
         targets.append("arm")
 
-    configure_opts = ["--enable-optimized",
-                      "--enable-targets=" + ",".join(targets),
-                      "--disable-assertions",
-                      "--prefix=%s" % inst_dir,
-                      "--with-gcc-toolchain=%s" % gcc_toolchain_dir,
-                      "--disable-compiler-version-checks"]
+    configure_opts = [
+        "--enable-optimized",
+        "--enable-targets=" + ",".join(targets),
+        "--disable-assertions",
+        f"--prefix={inst_dir}",
+        f"--with-gcc-toolchain={gcc_toolchain_dir}",
+        "--disable-compiler-version-checks",
+    ]
     build_package(llvm_source_dir, build_dir, configure_opts, [])
 
 if __name__ == "__main__":
@@ -128,12 +126,12 @@ if __name__ == "__main__":
     # cleans it up automatically.
     base_dir = "/builds/slave/moz-toolchain"
 
-    source_dir = base_dir + "/src"
-    build_dir = base_dir + "/build"
+    source_dir = f"{base_dir}/src"
+    build_dir = f"{base_dir}/build"
 
-    llvm_source_dir = source_dir + "/llvm"
-    clang_source_dir = source_dir + "/clang"
-    compiler_rt_source_dir = source_dir + "/compiler-rt"
+    llvm_source_dir = f"{source_dir}/llvm"
+    clang_source_dir = f"{source_dir}/clang"
+    compiler_rt_source_dir = f"{source_dir}/compiler-rt"
 
     gcc_dir = "/tools/gcc-4.7.3-0moz1"
 
@@ -157,9 +155,8 @@ if __name__ == "__main__":
         svn_co(llvm_repo, llvm_source_dir, llvm_revision)
         svn_co(clang_repo, clang_source_dir, llvm_revision)
         svn_co(compiler_repo, compiler_rt_source_dir, llvm_revision)
-        os.symlink("../../clang", llvm_source_dir + "/tools/clang")
-        os.symlink("../../compiler-rt",
-                   llvm_source_dir + "/projects/compiler-rt")
+        os.symlink("../../clang", f"{llvm_source_dir}/tools/clang")
+        os.symlink("../../compiler-rt", f"{llvm_source_dir}/projects/compiler-rt")
         for p in config.get("patches", {}).get(get_platform(), []):
             patch(p, source_dir)
 
@@ -167,8 +164,8 @@ if __name__ == "__main__":
         shutil.rmtree(build_dir)
     os.makedirs(build_dir)
 
-    stage1_dir = build_dir + '/stage1'
-    stage1_inst_dir = stage1_dir + '/clang'
+    stage1_dir = f'{build_dir}/stage1'
+    stage1_inst_dir = f'{stage1_dir}/clang'
 
     if is_darwin():
         extra_cflags = ""
@@ -178,21 +175,28 @@ if __name__ == "__main__":
     else:
         extra_cflags = "-static-libgcc"
         extra_cxxflags = "-static-libgcc -static-libstdc++"
-        cc = gcc_dir + "/bin/gcc"
-        cxx = gcc_dir + "/bin/g++"
+        cc = f"{gcc_dir}/bin/gcc"
+        cxx = f"{gcc_dir}/bin/g++"
 
     if os.environ.has_key('LD_LIBRARY_PATH'):
-        os.environ['LD_LIBRARY_PATH'] = '%s/lib64/:%s' % (gcc_dir, os.environ['LD_LIBRARY_PATH']);
+        os.environ[
+            'LD_LIBRARY_PATH'
+        ] = f"{gcc_dir}/lib64/:{os.environ['LD_LIBRARY_PATH']}";
     else:
-        os.environ['LD_LIBRARY_PATH'] = '%s/lib64/' % gcc_dir
+        os.environ['LD_LIBRARY_PATH'] = f'{gcc_dir}/lib64/'
 
     build_one_stage({"CC": cc, "CXX": cxx}, stage1_dir, llvm_source_dir, gcc_dir)
 
-    stage2_dir = build_dir + '/stage2'
+    stage2_dir = f'{build_dir}/stage2'
     build_one_stage(
-        {"CC": stage1_inst_dir + "/bin/clang %s" % extra_cflags,
-         "CXX": stage1_inst_dir + "/bin/clang++ %s" % extra_cxxflags},
-        stage2_dir, llvm_source_dir, gcc_dir)
+        {
+            "CC": f"{stage1_inst_dir}/bin/clang {extra_cflags}",
+            "CXX": f"{stage1_inst_dir}/bin/clang++ {extra_cxxflags}",
+        },
+        stage2_dir,
+        llvm_source_dir,
+        gcc_dir,
+    )
 
     build_tar_package("tar", "clang.tar.bz2", stage2_dir, "clang")
     build_tooltool_manifest(llvm_revision)

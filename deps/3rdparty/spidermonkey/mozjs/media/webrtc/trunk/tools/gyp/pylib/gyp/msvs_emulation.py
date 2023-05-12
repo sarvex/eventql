@@ -43,7 +43,7 @@ def QuoteForRspFile(arg):
 
   # Finally, wrap the whole thing in quotes so that the above quote rule
   # applies and whitespace isn't a word break.
-  return '"' + arg + '"'
+  return f'"{arg}"'
 
 
 def EncodeRspFileList(args):
@@ -56,10 +56,10 @@ def EncodeRspFileList(args):
   if not args: return ''
   if args[0].startswith('call '):
     call, program = args[0].split(' ', 1)
-    program = call + ' ' + os.path.normpath(program)
+    program = f'{call} {os.path.normpath(program)}'
   else:
     program = os.path.normpath(args[0])
-  return program + ' ' + ' '.join(QuoteForRspFile(arg) for arg in args[1:])
+  return f'{program} ' + ' '.join(QuoteForRspFile(arg) for arg in args[1:])
 
 
 def _GenericRetrieve(root, default, path):
@@ -67,9 +67,7 @@ def _GenericRetrieve(root, default, path):
   value at path, or return |default| if any of the path doesn't exist."""
   if not root:
     return default
-  if not path:
-    return root
-  return _GenericRetrieve(root.get(path[0]), default, path[1:])
+  return _GenericRetrieve(root.get(path[0]), default, path[1:]) if path else root
 
 
 def _AddPrefix(element, prefix):
@@ -77,7 +75,7 @@ def _AddPrefix(element, prefix):
   if element is None:
     return element
   # Note, not Iterable because we don't want to handle strings like that.
-  if isinstance(element, list) or isinstance(element, tuple):
+  if isinstance(element, (list, tuple)):
     return [prefix + e for e in element]
   else:
     return prefix + element
@@ -89,7 +87,7 @@ def _DoRemapping(element, map):
   if map is not None and element is not None:
     if not callable(map):
       map = map.get # Assume it's a dict, otherwise a callable to do the remap.
-    if isinstance(element, list) or isinstance(element, tuple):
+    if isinstance(element, (list, tuple)):
       element = filter(None, [map(elem) for elem in element])
     else:
       element = map(element)
@@ -100,13 +98,12 @@ def _AppendOrReturn(append, element):
   """If |append| is None, simply return |element|. If |append| is not None,
   then add |element| to it, adding each item in |element| if it's a list or
   tuple."""
-  if append is not None and element is not None:
-    if isinstance(element, list) or isinstance(element, tuple):
-      append.extend(element)
-    else:
-      append.append(element)
-  else:
+  if append is None or element is None:
     return element
+  if isinstance(element, (list, tuple)):
+    append.extend(element)
+  else:
+    append.append(element)
 
 
 def _FindDirectXInstallation():
@@ -280,8 +277,7 @@ class MsvsSettings(object):
   def GetCflags(self, config):
     """Returns the flags that need to be added to .c and .cc compilations."""
     config = self._RealConfig(config)
-    cflags = []
-    cflags.extend(['/wd' + w for w in self.msvs_disabled_warnings[config]])
+    cflags = [f'/wd{w}' for w in self.msvs_disabled_warnings[config]]
     cl = self._GetWrapper(self, self.msvs_settings[config],
                           'VCCLCompilerTool', append=cflags)
     cl('Optimization',
@@ -324,7 +320,7 @@ class MsvsSettings(object):
       source_ext = os.path.splitext(self.msvs_precompiled_source[config])[1]
       if _LanguageMatchesForPch(source_ext, extension):
         pch = os.path.split(self.msvs_precompiled_header[config])[1]
-        return ['/Yu' + pch, '/FI' + pch, '/Fp${pchprefix}.' + pch + '.pch']
+        return [f'/Yu{pch}', f'/FI{pch}', '/Fp${pchprefix}.' + pch + '.pch']
     return  []
 
   def GetCflagsC(self, config):
@@ -346,7 +342,7 @@ class MsvsSettings(object):
     libpaths = [os.path.normpath(
                     gyp_to_build_path(self.ConvertVSMacros(p, config=config)))
                 for p in libpaths]
-    return ['/LIBPATH:"' + p + '"' for p in libpaths]
+    return [f'/LIBPATH:"{p}"' for p in libpaths]
 
   def GetLibFlags(self, config, gyp_to_build_path):
     """Returns the flags that need to be added to lib commands."""
@@ -366,7 +362,7 @@ class MsvsSettings(object):
     if spec['type'] in ('shared_library', 'loadable_module', 'executable'):
       def_files = [s for s in spec.get('sources', []) if s.endswith('.def')]
       if len(def_files) == 1:
-        ldflags.append('/DEF:"%s"' % gyp_to_build_path(def_files[0]))
+        ldflags.append(f'/DEF:"{gyp_to_build_path(def_files[0])}"')
       elif len(def_files) > 1:
         raise Exception("Multiple .def files")
 
@@ -384,9 +380,8 @@ class MsvsSettings(object):
     ldflags.extend(self._GetAdditionalLibraryDirectories(
         'VCLinkerTool', config, gyp_to_build_path))
     ld('DelayLoadDLLs', prefix='/DELAYLOAD:')
-    out = self.GetOutputName(config, expand_special)
-    if out:
-      ldflags.append('/OUT:' + out)
+    if out := self.GetOutputName(config, expand_special):
+      ldflags.append(f'/OUT:{out}')
     ld('AdditionalOptions', prefix='')
     ld('SubSystem', map={'1': 'CONSOLE', '2': 'WINDOWS'}, prefix='/SUBSYSTEM:')
     ld('LinkIncremental', map={'1': ':NO', '2': ''}, prefix='/INCREMENTAL')
@@ -439,11 +434,11 @@ class MsvsSettings(object):
     # VCManifestTool blocks if Chromium or other projects need them in the
     # future. Of particular note, we do not yet support EmbedManifest because
     # it complicates incremental linking.
-    output_name = name + '.intermediate.manifest'
+    output_name = f'{name}.intermediate.manifest'
     flags = [
-      '/MANIFEST',
-      '/ManifestFile:' + output_name,
-      '''/MANIFESTUAC:"level='asInvoker' uiAccess='false'"'''
+        '/MANIFEST',
+        f'/ManifestFile:{output_name}',
+        '''/MANIFESTUAC:"level='asInvoker' uiAccess='false'"''',
     ]
     if allow_isolation:
       flags.append('/ALLOWISOLATION')
@@ -495,14 +490,12 @@ class MsvsSettings(object):
     are in posix style, if the command line will be used here."""
     cygwin_dir = os.path.normpath(
         os.path.join(path_to_base, self.msvs_cygwin_dirs[0]))
-    cd = ('cd %s' % path_to_base).replace('\\', '/')
+    cd = f'cd {path_to_base}'.replace('\\', '/')
     args = [a.replace('\\', '/').replace('"', '\\"') for a in args]
     args = ["'%s'" % a.replace("'", "'\\''") for a in args]
     bash_cmd = ' '.join(args)
-    cmd = (
-        'call "%s\\setup_env.bat" && set CYGWIN=nontsec && ' % cygwin_dir +
-        'bash -c "%s ; %s"' % (cd, bash_cmd))
-    return cmd
+    return ('call "%s\\setup_env.bat" && set CYGWIN=nontsec && ' % cygwin_dir +
+            f'bash -c "{cd} ; {bash_cmd}"')
 
   def IsRuleRunUnderCygwin(self, rule):
     """Determine if an action should be run under cygwin. If the variable is
@@ -513,10 +506,9 @@ class MsvsSettings(object):
   def HasExplicitIdlRules(self, spec):
     """Determine if there's an explicit rule for idl files. When there isn't we
     need to generate implicit rules to build MIDL .idl files."""
-    for rule in spec.get('rules', []):
-      if rule['extension'] == 'idl' and int(rule.get('msvs_external_rule', 0)):
-        return True
-    return False
+    return any(
+        rule['extension'] == 'idl' and int(rule.get('msvs_external_rule', 0))
+        for rule in spec.get('rules', []))
 
   def GetIdlBuildData(self, source, config):
     """Determine the implicit outputs for an idl file. Returns output
@@ -584,10 +576,11 @@ class PrecompiledHeader(object):
     source = self._PchSource()
     assert source
     pch_ext = os.path.splitext(self._PchSource())[1]
-    for source in sources:
-      if _LanguageMatchesForPch(os.path.splitext(source)[1], pch_ext):
-        return [(None, None, self._PchOutput())]
-    return []
+    return next(
+        ([(None, None, self._PchOutput())] for source in sources
+         if _LanguageMatchesForPch(os.path.splitext(source)[1], pch_ext)),
+        [],
+    )
 
   def GetPchBuildCommands(self):
     """Returns [(path_to_pch, language_flag, language, header)].
@@ -598,7 +591,7 @@ class PrecompiledHeader(object):
       return []
     ext = os.path.splitext(source)[1]
     lang = 'c' if ext == '.c' else 'cc'
-    return [(self._PchOutput(), '/Yc' + header, lang, source)]
+    return [(self._PchOutput(), f'/Yc{header}', lang, source)]
 
 
 vs_version = None
@@ -625,8 +618,9 @@ def ExpandMacros(string, expansions):
 def _ExtractImportantEnvironment(output_of_set):
   """Extracts environment variables required for the toolchain to run from
   a textual dump output by the cmd.exe 'set' command."""
+  env = {}
   envvars_to_save = (
-      'goma_.*', # TODO(scottmg): This is ugly, but needed for goma.
+      'goma_.*',  # TODO(scottmg): This is ugly, but needed for goma.
       'include',
       'lib',
       'libpath',
@@ -635,11 +629,10 @@ def _ExtractImportantEnvironment(output_of_set):
       'systemroot',
       'temp',
       'tmp',
-      )
-  env = {}
+  )
   for line in output_of_set.splitlines():
     for envvar in envvars_to_save:
-      if re.match(envvar + '=', line.lower()):
+      if re.match(f'{envvar}=', line.lower()):
         var, setting = line.split('=', 1)
         if envvar == 'path':
           # Our own rules (for running gyp-win-tool) and other actions in
@@ -651,20 +644,18 @@ def _ExtractImportantEnvironment(output_of_set):
         break
   for required in ('SYSTEMROOT', 'TEMP', 'TMP'):
     if required not in env:
-      raise Exception('Environment variable "%s" '
-                      'required to be set to valid path' % required)
+      raise Exception(
+          f'Environment variable "{required}" required to be set to valid path'
+      )
   return env
 
 def _FormatAsEnvironmentBlock(envvar_dict):
   """Format as an 'environment block' directly suitable for CreateProcess.
   Briefly this is a list of key=value\0, terminated by an additional \0. See
   CreateProcess documentation for more details."""
-  block = ''
   nul = '\0'
-  for key, value in envvar_dict.iteritems():
-    block += key + '=' + value + nul
-  block += nul
-  return block
+  return (''.join(f'{key}={value}{nul}'
+                  for key, value in envvar_dict.iteritems()) + nul)
 
 def GenerateEnvironmentFiles(toplevel_build_dir, generator_flags, open_out):
   """It's not sufficient to have the absolute path to the compiler, linker,
@@ -686,6 +677,6 @@ def GenerateEnvironmentFiles(toplevel_build_dir, generator_flags, open_out):
     variables, _ = popen.communicate()
     env = _ExtractImportantEnvironment(variables)
     env_block = _FormatAsEnvironmentBlock(env)
-    f = open_out(os.path.join(toplevel_build_dir, 'environment.' + arch), 'wb')
+    f = open_out(os.path.join(toplevel_build_dir, f'environment.{arch}'), 'wb')
     f.write(env_block)
     f.close()

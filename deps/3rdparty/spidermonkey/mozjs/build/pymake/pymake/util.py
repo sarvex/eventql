@@ -6,11 +6,8 @@ class MakeError(Exception):
         self.loc = loc
 
     def __str__(self):
-        locstr = ''
-        if self.loc is not None:
-            locstr = "%s:" % (self.loc,)
-
-        return "%s%s" % (locstr, self.msg)
+        locstr = f"{self.loc}:" if self.loc is not None else ''
+        return f"{locstr}{self.msg}"
 
 def normaljoin(path, suffix):
     """
@@ -85,10 +82,7 @@ try:
     from __builtin__ import any
 except ImportError:
     def any(it):
-        for i in it:
-            if i:
-                return True
-        return False
+        return any(it)
 
 class _MostUsedItem(object):
     __slots__ = ('key', 'o', 'count')

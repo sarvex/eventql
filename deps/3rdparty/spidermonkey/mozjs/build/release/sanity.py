@@ -21,25 +21,21 @@ def check_buildbot():
 def find_version(contents, versionNumber):
     """Given an open readable file-handle look for the occurrence
        of the version # in the file"""
-    ret = re.search(re.compile(re.escape(versionNumber), re.DOTALL), contents)
-    return ret
+    return re.search(re.compile(re.escape(versionNumber), re.DOTALL), contents)
 
 
 def locale_diff(locales1, locales2):
     """ accepts two lists and diffs them both ways, returns any differences
     found """
-    diff_list = [locale for locale in locales1 if not locale in locales2]
-    diff_list.extend(locale for locale in locales2 if not locale in locales1)
+    diff_list = [locale for locale in locales1 if locale not in locales2]
+    diff_list.extend(locale for locale in locales2 if locale not in locales1)
     return diff_list
 
 
 def get_buildbot_username_param():
     cmd = ['buildbot', 'sendchange', '--help']
     output = get_output(cmd)
-    if "-W, --who=" in output:
-        return "--who"
-    else:
-        return "--username"
+    return "--who" if "-W, --who=" in output else "--username"
 
 
 def sendchange(branch, revision, username, master, products):
@@ -56,12 +52,12 @@ def sendchange(branch, revision, username, master, products):
         '--branch',
         branch,
         '-p',
-        'products:%s' % ','.join(products),
+        f"products:{','.join(products)}",
         '-p',
-        'script_repo_revision:%s' % revision,
-        'release_build'
+        f'script_repo_revision:{revision}',
+        'release_build',
     ]
-    logging.info("Executing: %s" % cmd)
+    logging.info(f"Executing: {cmd}")
     run_cmd(cmd)
 
 
@@ -79,7 +75,7 @@ def verify_mozconfigs(mozconfig_pair, nightly_mozconfig_pair, platform,
 
     missing_args = mozconfig_lines == [] or nightly_mozconfig_lines == []
     if missing_args:
-        log.info("Missing mozconfigs to compare for %s" % platform)
+        log.info(f"Missing mozconfigs to compare for {platform}")
         return False
 
     success = True
@@ -90,28 +86,29 @@ def verify_mozconfigs(mozconfig_pair, nightly_mozconfig_pair, platform,
 
     for line in diffList:
         clean_line = line[1:].strip()
-        if (line[0] == '-' or line[0] == '+') and len(clean_line) > 1:
+        if line[0] in ['-', '+'] and len(clean_line) > 1:
             # skip comment lines
             if clean_line.startswith('#'):
                 continue
             # compare to whitelist
             message = ""
             if line[0] == '-':
-                if platform in mozconfigWhitelist.get('release', {}):
-                    if clean_line in \
-                            mozconfigWhitelist['release'][platform]:
-                        continue
+                if (
+                    platform in mozconfigWhitelist.get('release', {})
+                    and clean_line in mozconfigWhitelist['release'][platform]
+                ):
+                    continue
             elif line[0] == '+':
                 if platform in mozconfigWhitelist.get('nightly', {}):
                     if clean_line in \
                             mozconfigWhitelist['nightly'][platform]:
                         continue
                     else:
-                        log.warning("%s not in %s %s!" % (
-                            clean_line, platform,
-                            mozconfigWhitelist['nightly'][platform]))
+                        log.warning(
+                            f"{clean_line} not in {platform} {mozconfigWhitelist['nightly'][platform]}!"
+                        )
             else:
-                log.error("Skipping line %s!" % line)
+                log.error(f"Skipping line {line}!")
                 continue
             message = "found in %s but not in %s: %s"
             if line[0] == '-':

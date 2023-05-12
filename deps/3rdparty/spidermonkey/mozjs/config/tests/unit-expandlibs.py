@@ -113,10 +113,10 @@ class ReplicateTests(type):
     '''Replicates tests for unix and windows variants'''
     def __new__(cls, clsName, bases, dict):
         for name in [key for key in dict if key.startswith('test_')]:
-            dict[name + '_unix'] = wrap_method(config_unix, dict[name])
-            dict[name + '_unix'].__doc__ = dict[name].__doc__ + ' (unix)'
-            dict[name + '_win'] = wrap_method(config_win, dict[name])
-            dict[name + '_win'].__doc__ = dict[name].__doc__ + ' (win)'
+            dict[f'{name}_unix'] = wrap_method(config_unix, dict[name])
+            dict[f'{name}_unix'].__doc__ = f'{dict[name].__doc__} (unix)'
+            dict[f'{name}_win'] = wrap_method(config_win, dict[name])
+            dict[f'{name}_win'].__doc__ = f'{dict[name].__doc__} (win)'
             del dict[name]
         return type.__new__(cls, clsName, bases, dict)
 
@@ -226,7 +226,7 @@ class TestExpandArgsMore(TestExpandInit):
 
             tmp = args.tmp
         # Check that all temporary files are properly removed
-        self.assertEqual(True, all([not os.path.exists(f) for f in tmp]))
+        self.assertEqual(True, all(not os.path.exists(f) for f in tmp))
 
     def test_extract(self):
         '''Test library extraction'''
@@ -252,26 +252,28 @@ class TestExpandArgsMore(TestExpandInit):
             # Simulate file extraction
             lib = os.path.splitext(os.path.basename(arg))[0]
             if config.AR != 'lib':
-                extract = [lib, lib + '2']
+                extract = [lib, f'{lib}2']
             extract = [os.path.join(kargs['cwd'], f) for f in extract]
             if config.AR != 'lib':
                 extract = [Obj(f) for f in extract]
-            if not lib in extracted:
+            if lib not in extracted:
                 extracted[lib] = []
             extracted[lib].extend(extract)
             self.touch(extract)
+
         subprocess.call = call
 
         def check_output(args, **kargs):
             # The command called is always AR
             ar = config.AR
-            self.assertEqual(args[0:3], [ar, '-NOLOGO', '-LIST'])
-            # Remaining argument is always one library
-            self.assertRelEqual([os.path.splitext(arg)[1] for arg in args[3:]],
-[config.LIB_SUFFIX])
+            self.assertEqual(args[:3], [ar, '-NOLOGO', '-LIST'])
+                    # Remaining argument is always one library
+                    self.assertRelEqual([os.path.splitext(arg)[1] for arg in args[3:]],
+            [config.LIB_SUFFIX])
             # Simulate LIB -NOLOGO -LIST
             lib = os.path.splitext(os.path.basename(args[3]))[0]
-            return '%s\n%s\n' % (Obj(lib), Obj(lib + '2'))
+            return '%s\n%s\n' % (Obj(lib), Obj(f'{lib}2'))
+
         subprocess.check_output = check_output
 
         # ExpandArgsMore does the same as ExpandArgs
@@ -308,14 +310,19 @@ class TestExpandArgsMore(TestExpandInit):
                             dirname = os.path.dirname(f[len(self.tmpdir)+1:])
                             if base.endswith('f'):
                                 dirname = os.path.join(dirname, 'foo', 'bar')
-                            extracted_args.extend([self.tmpfile(dirname, Obj(base)), self.tmpfile(dirname, Obj(base + '2'))])
+                            extracted_args.extend(
+                                [
+                                    self.tmpfile(dirname, Obj(base)),
+                                    self.tmpfile(dirname, Obj(f'{base}2')),
+                                ]
+                            )
                     else:
                         extracted_args.append(f)
                 self.assertRelEqual(args, ['foo', '-bar'] + extracted_args)
 
                 tmp = args.tmp
             # Check that all temporary files are properly removed
-            self.assertEqual(True, all([not os.path.exists(f) for f in tmp]))
+            self.assertEqual(True, all(not os.path.exists(f) for f in tmp))
 
             # Create archives contents next to them for the second iteration.
             base = os.path.splitext(Lib('_'))[0]

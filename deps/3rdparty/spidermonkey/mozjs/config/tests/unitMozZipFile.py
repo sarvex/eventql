@@ -89,7 +89,7 @@ def createWriter(sizer, *items):
     for item in locitems:
       self._write(zf, **item)
     zf = None
-    pass
+
   return helper
 
 def createTester(name, *writes):
@@ -101,7 +101,7 @@ def createTester(name, *writes):
     for w in _writes:
       getattr(self, w)()
     self._verifyZip()
-    pass
+
   # unit tests get confused if the method name isn't test...
   tester.__name__ = name
   return tester
@@ -171,10 +171,16 @@ for w in xrange(writes):
   for descs in prod(*nonatomics):
     suffix = getid(descs)
     dicts = [dict(leaf=leaf, length=length) for leaf, length in descs]
-    setattr(TestExtensiveStored, '_write' + suffix,
-            createWriter(givenlength, *dicts))
-    setattr(TestExtensiveStored, 'test' + suffix,
-            createTester('test' + suffix, '_write' + suffix))
+    setattr(
+        TestExtensiveStored,
+        f'_write{suffix}',
+        createWriter(givenlength, *dicts),
+    )
+    setattr(
+        TestExtensiveStored,
+        f'test{suffix}',
+        createTester(f'test{suffix}', f'_write{suffix}'),
+    )
 
 # now create another round of tests, with two writing passes
 # first, write all file combinations into the jar, close it,
@@ -187,10 +193,10 @@ allfiles = reduce(lambda l,r:l+r,
 
 for first in allfiles:
   testbasename = 'test{0}_'.format(getid(first))
-  test = [None, '_write' + getid(first), None]
+  test = [None, f'_write{getid(first)}', None]
   for second in atomics:
     test[0] = testbasename + getid([second])
-    test[2] = '_write' + getid([second])
+    test[2] = f'_write{getid([second])}'
     setattr(TestExtensiveStored, test[0], createTester(*test))
 
 class TestExtensiveDeflated(TestExtensiveStored):

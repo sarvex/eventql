@@ -48,7 +48,7 @@ def runUtil(util, args, inputdata = None):
     pathvar = "LD_LIBRARY_PATH"
     app_path = os.path.dirname(util)
     if pathvar in env:
-      env[pathvar] = "%s%s%s" % (app_path, os.pathsep, env[pathvar])
+      env[pathvar] = f"{app_path}{os.pathsep}{env[pathvar]}"
     else:
       env[pathvar] = app_path
   proc = subprocess.Popen([util] + args, env=env,
@@ -58,7 +58,7 @@ def runUtil(util, args, inputdata = None):
 
 
 def createRandomFile(randomFile):
-  for count in xrange(0, 2048):
+  for _ in xrange(0, 2048):
     randomFile.write(chr(random.randint(0, 255)))
 
 
@@ -68,28 +68,75 @@ def createCertificateAuthority(build, srcDir):
 
   #TODO: mozfile.TemporaryDirectory
   tempDbDir = tempfile.mkdtemp()
-  with NamedTemporaryFile() as pwfile, NamedTemporaryFile() as rndfile:
+  with (NamedTemporaryFile() as pwfile, NamedTemporaryFile() as rndfile):
     pgoCAModulePathSrc = os.path.join(srcDir, "pgoca.p12")
     pgoCAPathSrc = os.path.join(srcDir, "pgoca.ca")
 
     pwfile.write("\n")
 
-    # Create temporary certification database for CA generation
-    status = runUtil(certutil, ["-N", "-d", tempDbDir, "-f", pwfile.name])
-    if status:
+    if status := runUtil(certutil, ["-N", "-d", tempDbDir, "-f", pwfile.name]):
       return status
 
     createRandomFile(rndfile)
-    status = runUtil(certutil, ["-S", "-d", tempDbDir, "-s", "CN=Temporary Certificate Authority, O=Mozilla Testing, OU=Profile Guided Optimization", "-t", "C,,", "-x", "-m", "1", "-v", "120", "-n", "pgo temporary ca", "-2", "-f", pwfile.name, "-z", rndfile.name], "Y\n0\nN\n")
-    if status:
+    if status := runUtil(
+        certutil,
+        [
+            "-S",
+            "-d",
+            tempDbDir,
+            "-s",
+            "CN=Temporary Certificate Authority, O=Mozilla Testing, OU=Profile Guided Optimization",
+            "-t",
+            "C,,",
+            "-x",
+            "-m",
+            "1",
+            "-v",
+            "120",
+            "-n",
+            "pgo temporary ca",
+            "-2",
+            "-f",
+            pwfile.name,
+            "-z",
+            rndfile.name,
+        ],
+        "Y\n0\nN\n",
+    ):
       return status
 
-    status = runUtil(certutil, ["-L", "-d", tempDbDir, "-n", "pgo temporary ca", "-a", "-o", pgoCAPathSrc, "-f", pwfile.name])
-    if status:
+    if status := runUtil(
+        certutil,
+        [
+            "-L",
+            "-d",
+            tempDbDir,
+            "-n",
+            "pgo temporary ca",
+            "-a",
+            "-o",
+            pgoCAPathSrc,
+            "-f",
+            pwfile.name,
+        ],
+    ):
       return status
 
-    status = runUtil(pk12util, ["-o", pgoCAModulePathSrc, "-n", "pgo temporary ca", "-d", tempDbDir, "-w", pwfile.name, "-k", pwfile.name])
-    if status:
+    if status := runUtil(
+        pk12util,
+        [
+            "-o",
+            pgoCAModulePathSrc,
+            "-n",
+            "pgo temporary ca",
+            "-d",
+            tempDbDir,
+            "-w",
+            pwfile.name,
+            "-k",
+            pwfile.name,
+        ],
+    ):
       return status
 
   shutil.rmtree(tempDbDir)

@@ -35,9 +35,9 @@ def getMarProperties(filename, partial=False):
     (mar_hash, mar_size) = getFileHashAndSize(filename)
     martype = 'partial' if partial else 'complete'
     return {
-        '%sMarFilename' % martype: os.path.basename(filename),
-        '%sMarSize' % martype: mar_size,
-        '%sMarHash' % martype: mar_hash,
+        f'{martype}MarFilename': os.path.basename(filename),
+        f'{martype}MarSize': mar_size,
+        f'{martype}MarHash': mar_hash,
     }
 
 def getUrlProperties(filename, package):
@@ -64,12 +64,11 @@ def getUrlProperties(filename, package):
     try:
         with open(filename) as f:
             for line in f:
-                m = url_re.match(line)
-                if m:
-                    m = m.group(1)
+                if m := url_re.match(line):
+                    m = m[1]
                     for prop, condition in property_conditions:
                         if condition(m):
-                            properties.update({prop: m})
+                            properties[prop] = m
                             break
     except IOError as e:
         if e.errno != errno.ENOENT:
@@ -109,10 +108,8 @@ if __name__ == '__main__':
     if args.partial_mar_file:
         json_data.update(getMarProperties(args.partial_mar_file, partial=True))
 
-        # Pull the previous buildid from the partial mar filename.
-        res = re.match(r'.*\.([0-9]+)-[0-9]+.mar', args.partial_mar_file)
-        if res:
-            json_data['previous_buildid'] = res.group(1)
+        if res := re.match(r'.*\.([0-9]+)-[0-9]+.mar', args.partial_mar_file):
+            json_data['previous_buildid'] = res[1]
 
             # Set partialInfo to be a collection of the partial mar properties
             # useful for balrog.

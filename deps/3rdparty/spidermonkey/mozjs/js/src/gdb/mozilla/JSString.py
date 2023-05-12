@@ -36,35 +36,26 @@ class JSStringPtr(Common):
 
     def chars(self):
         d = self.value['d']
-        length = d['u1']['length']
         flags = d['u1']['flags']
         is_rope = ((flags & self.stc.TYPE_FLAGS_MASK) == self.stc.ROPE_FLAGS)
         if is_rope:
-            for c in JSStringPtr(d['s']['u2']['left'], self.cache).chars():
-                yield c
-            for c in JSStringPtr(d['s']['u3']['right'], self.cache).chars():
-                yield c
+            yield from JSStringPtr(d['s']['u2']['left'], self.cache).chars()
+            yield from JSStringPtr(d['s']['u3']['right'], self.cache).chars()
         else:
             is_inline = (flags & self.stc.INLINE_CHARS_BIT) != 0
             is_latin1 = (flags & self.stc.LATIN1_CHARS_BIT) != 0
             if is_inline:
-                if is_latin1:
-                    chars = d['inlineStorageLatin1']
-                else:
-                    chars = d['inlineStorageTwoByte']
+                chars = d['inlineStorageLatin1'] if is_latin1 else d['inlineStorageTwoByte']
+            elif is_latin1:
+                chars = d['s']['u2']['nonInlineCharsLatin1']
             else:
-                if is_latin1:
-                    chars = d['s']['u2']['nonInlineCharsLatin1']
-                else:
-                    chars = d['s']['u2']['nonInlineCharsTwoByte']
+                chars = d['s']['u2']['nonInlineCharsTwoByte']
+            length = d['u1']['length']
             for i in range(int(length)):
                 yield chars[i]
 
     def to_string(self):
-        s = u''
-        for c in self.chars():
-            s += chr(c)
-        return s
+        return u''.join(chr(c) for c in self.chars())
 
 @ptr_pretty_printer("JSAtom")
 class JSAtomPtr(Common):

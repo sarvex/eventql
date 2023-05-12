@@ -21,9 +21,9 @@ class JSSymbolPtr(mozilla.prettyprinters.Pointer):
         code = int(self.value['code_'])
         desc = str(self.value['description_'])
         if code == InSymbolRegistry:
-            return "Symbol.for({})".format(desc)
+            return f"Symbol.for({desc})"
         elif code == UniqueSymbol:
-            return "Symbol({})".format(desc)
+            return f"Symbol({desc})"
         else:
             # Well-known symbol. Strip off the quotes added by the JSString *
             # pretty-printer.

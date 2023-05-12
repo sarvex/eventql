@@ -48,11 +48,26 @@ def scan_directory(path):
                         shutil.copy(absDylibPath, path)
 
                         # Now rewrite the library itself
-                        subprocess.check_call(['install_name_tool', '-id', '@executable_path/' + DYLIB_NAME, os.path.join(path, DYLIB_NAME)])
+                        subprocess.check_call(
+                            [
+                                'install_name_tool',
+                                '-id',
+                                f'@executable_path/{DYLIB_NAME}',
+                                os.path.join(path, DYLIB_NAME),
+                            ]
+                        )
                         dylibCopied = True
 
                     # Now use install_name_tool to rewrite the path in our binary
-                    subprocess.check_call(['install_name_tool', '-change', absDylibPath, '@executable_path/' + DYLIB_NAME, filename])
+                    subprocess.check_call(
+                        [
+                            'install_name_tool',
+                            '-change',
+                            absDylibPath,
+                            f'@executable_path/{DYLIB_NAME}',
+                            filename,
+                        ]
+                    )
                     break
 
 if __name__ == '__main__':

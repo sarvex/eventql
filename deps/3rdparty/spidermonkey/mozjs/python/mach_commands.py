@@ -33,11 +33,12 @@ class MachCommands(MachCommandBase):
 
         self._activate_virtualenv()
 
-        return self.run_process([self.virtualenv_manager.python_path] + args,
-            pass_thru=True, # Allow user to run Python interactively.
-            ensure_exit_code=False, # Don't throw on non-zero exit code.
-            # Note: subprocess requires native strings in os.environ on Windows
-            append_env={b'PYTHONDONTWRITEBYTECODE': str('1')})
+        return self.run_process(
+            [self.virtualenv_manager.python_path] + args,
+            pass_thru=True,
+            ensure_exit_code=False,
+            append_env={b'PYTHONDONTWRITEBYTECODE': '1'},
+        )
 
     @Command('python-test', category='testing',
         description='Run Python unit tests.')
@@ -75,8 +76,8 @@ class MachCommands(MachCommandBase):
                 if test.endswith('.py') and os.path.isfile(test):
                     files.append(test)
                     break
-                elif os.path.isfile(test + '.py'):
-                    files.append(test + '.py')
+                elif os.path.isfile(f'{test}.py'):
+                    files.append(f'{test}.py')
                     break
                 elif os.path.isdir(test):
                     files += glob.glob(mozpath.join(test, 'test*.py'))
@@ -97,11 +98,11 @@ class MachCommands(MachCommandBase):
 
             inner_return_code = self.run_process(
                 [self.virtualenv_manager.python_path, f],
-                ensure_exit_code=False, # Don't throw on non-zero exit code.
+                ensure_exit_code=False,
                 log_name='python-test',
-                # subprocess requires native strings in os.environ on Windows
-                append_env={b'PYTHONDONTWRITEBYTECODE': str('1')},
-                line_handler=_line_handler)
+                append_env={b'PYTHONDONTWRITEBYTECODE': '1'},
+                line_handler=_line_handler,
+            )
             return_code += inner_return_code
 
             if not file_displayed_test:

@@ -40,9 +40,10 @@ ptr_printers_by_tag = {}
 def ptr_pretty_printer(type_name):
     def add(fn):
         check_for_reused_pretty_printer(fn)
-        add_to_subprinter_list(fn, "ptr-to-" + type_name)
+        add_to_subprinter_list(fn, f"ptr-to-{type_name}")
         ptr_printers_by_tag[type_name] = fn
         return fn
+
     return add
 
 # a dictionary mapping gdb.Type tags to pretty-printer functions for
@@ -54,9 +55,10 @@ ref_printers_by_tag = {}
 def ref_pretty_printer(type_name):
     def add(fn):
         check_for_reused_pretty_printer(fn)
-        add_to_subprinter_list(fn, "ref-to-" + type_name)
+        add_to_subprinter_list(fn, f"ref-to-{type_name}")
         ref_printers_by_tag[type_name] = fn
         return fn
+
     return add
 
 # a dictionary mapping the template name portion of gdb.Type tags to
@@ -68,9 +70,10 @@ template_printers_by_tag = {}
 def template_pretty_printer(template_name):
     def add(fn):
         check_for_reused_pretty_printer(fn)
-        add_to_subprinter_list(fn, 'instantiations-of-' + template_name)
+        add_to_subprinter_list(fn, f'instantiations-of-{template_name}')
         template_printers_by_tag[template_name] = fn
         return fn
+
     return add
 
 # A list of (REGEXP, PRINTER) pairs, such that if REGEXP (a RegexObject)
@@ -206,7 +209,7 @@ def implemented_types(t):
     def followers(t):
         if t.code == gdb.TYPE_CODE_TYPEDEF:
             yield t.target()
-            for t2 in followers(t.target()): yield t2
+            yield from followers(t.target())
         elif t.code == gdb.TYPE_CODE_STRUCT:
             base_classes = []
             for f in t.fields():
@@ -214,10 +217,10 @@ def implemented_types(t):
                     yield f.type
                     base_classes.append(f.type)
             for b in base_classes:
-                for t2 in followers(b): yield t2
+                yield from followers(b)
 
     yield t
-    for t2 in followers(t): yield t2
+    yield from followers(t)
 
 template_regexp = re.compile("([\w_:]+)<")
 
@@ -331,15 +334,14 @@ class Pointer(object):
         if concrete_type.code == gdb.TYPE_CODE_PTR:
             address = self.value.cast(self.cache.void_ptr_t)
         elif concrete_type.code == gdb.TYPE_CODE_REF:
-            address = '@' + str(self.value.address.cast(self.cache.void_ptr_t))
+            address = f'@{str(self.value.address.cast(self.cache.void_ptr_t))}'
         else:
             assert not "mozilla.prettyprinters.Pointer applied to bad value type"
         try:
             summary = self.summary()
         except gdb.MemoryError as r:
             summary = str(r)
-        v = '(%s) %s %s' % (self.value.type, address, summary)
-        return v
+        return f'({self.value.type}) {address} {summary}'
 
     def summary(self):
         raise NotImplementedError

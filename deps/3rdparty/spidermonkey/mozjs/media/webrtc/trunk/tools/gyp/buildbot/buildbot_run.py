@@ -7,18 +7,14 @@
 """Argument-less script to select what to run on the buildbots."""
 
 
+
 import os
 import shutil
 import subprocess
 import sys
 
 
-if sys.platform in ['win32', 'cygwin']:
-  EXE_SUFFIX = '.exe'
-else:
-  EXE_SUFFIX = ''
-
-
+EXE_SUFFIX = '.exe' if sys.platform in ['win32', 'cygwin'] else ''
 BUILDBOT_DIR = os.path.dirname(os.path.abspath(__file__))
 TRUNK_DIR = os.path.dirname(BUILDBOT_DIR)
 ROOT_DIR = os.path.dirname(TRUNK_DIR)

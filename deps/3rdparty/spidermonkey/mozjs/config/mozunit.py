@@ -27,10 +27,7 @@ class _MozTestResult(_TestResult):
         self.descriptions = descriptions
 
     def getDescription(self, test):
-        if self.descriptions:
-            return test.shortDescription() or str(test)
-        else:
-            return str(test)
+        return test.shortDescription() or str(test) if self.descriptions else str(test)
 
     def addSuccess(self, test):
         _TestResult.addSuccess(self, test)
@@ -143,10 +140,7 @@ class MockedOpen(object):
             return True
 
         abspath = os.path.abspath(p)
-        if abspath in self.files:
-            return True
-
-        return self._orig_path_exists(p)
+        return True if abspath in self.files else self._orig_path_exists(p)
 
 def main(*args):
     unittest.main(testRunner=MozTestRunner(),*args)

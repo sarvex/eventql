@@ -58,10 +58,10 @@ class File(object):
         if hasattr(self, '_modified'):
             return self._modified
 
-        modified = True
-        if os.path.exists(self._path):
-            if open(self._path, 'rb').read() == self._content:
-                modified = False
+        modified = (
+            not os.path.exists(self._path)
+            or open(self._path, 'rb').read() != self._content
+        )
         self._modified = modified
         return modified
 
@@ -73,7 +73,7 @@ class File(object):
 
 
 # As defined in the various sub-configures in the tree
-PRECIOUS_VARS = set([
+PRECIOUS_VARS = {
     'build_alias',
     'host_alias',
     'target_alias',
@@ -88,7 +88,7 @@ PRECIOUS_VARS = set([
     'CXX',
     'CCASFLAGS',
     'CCAS',
-])
+}
 
 
 CONFIGURE_DATA = 'configure.pkl'
@@ -144,9 +144,7 @@ def maybe_clear_cache(data):
 def split_template(s):
     """Given a "file:template" string, returns "file", "template". If the string
     is of the form "file" (without a template), returns "file", "file.in"."""
-    if ':' in s:
-        return s.split(':', 1)
-    return s, '%s.in' % s
+    return s.split(':', 1) if ':' in s else (s, f'{s}.in')
 
 
 def get_config_files(data):
@@ -161,15 +159,13 @@ def get_config_files(data):
     # Scan the config.status output for information about configuration files
     # it generates.
     config_status_output = subprocess.check_output(
-        [data['shell'], '-c', '%s --help' % config_status],
-        stderr=subprocess.STDOUT).splitlines()
+        [data['shell'], '-c', f'{config_status} --help'],
+        stderr=subprocess.STDOUT,
+    ).splitlines()
     state = None
     for line in config_status_output:
         if line.startswith('Configuration') and line.endswith(':'):
-            if line.endswith('commands:'):
-                state = 'commands'
-            else:
-                state = 'config'
+            state = 'commands' if line.endswith('commands:') else 'config'
         elif not line.strip():
             state = None
         elif state:
@@ -203,18 +199,9 @@ def prepare(srcdir, objdir, shell, args):
             data = pickle.load(f)
             previous_args = data['args']
 
-    # Msys likes to break environment variables and command line arguments,
-    # so read those from stdin, as they are passed from the configure script
-    # when necessary (on windows).
-    # However, for some reason, $PATH is not handled like other environment
-    # variables, and msys remangles it even when giving it is already a msys
-    # $PATH. Fortunately, the mangling/demangling is just find for $PATH, so
-    # we can just take the value from the environment. Msys will convert it
-    # back properly when calling subconfigure.
-    input = sys.stdin.read()
-    if input:
+    if input := sys.stdin.read():
         data = {a: b for [a, b] in eval(input)}
-        environ = {a: b for a, b in data['env']}
+        environ = dict(data['env'])
         environ['PATH'] = os.environ['PATH']
         args = data['args']
     else:
@@ -252,7 +239,7 @@ def prepare(srcdir, objdir, shell, args):
 
 
 def prefix_lines(text, prefix):
-    return ''.join('%s> %s' % (prefix, line) for line in text.splitlines(True))
+    return ''.join(f'{prefix}> {line}' for line in text.splitlines(True))
 
 
 def run(objdir):

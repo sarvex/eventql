@@ -51,17 +51,13 @@ def generate_precomplete(root_path):
         rel_path_precomplete = "Contents/Resources/precomplete"
 
     precomplete_file_path = os.path.join(root_path,rel_path_precomplete)
-    # Open the file so it exists before building the list of files and open it
-    # in binary mode to prevent OS specific line endings.
-    precomplete_file = open(precomplete_file_path, "wb")
-    rel_file_path_list, rel_dir_path_list = get_build_entries(root_path)
-    for rel_file_path in rel_file_path_list:
-        precomplete_file.writelines("remove \""+rel_file_path+"\"\n")
+    with open(precomplete_file_path, "wb") as precomplete_file:
+        rel_file_path_list, rel_dir_path_list = get_build_entries(root_path)
+        for rel_file_path in rel_file_path_list:
+            precomplete_file.writelines("remove \""+rel_file_path+"\"\n")
 
-    for rel_dir_path in rel_dir_path_list:
-        precomplete_file.writelines("rmdir \""+rel_dir_path+"\"\n")
-
-    precomplete_file.close()
+        for rel_dir_path in rel_dir_path_list:
+            precomplete_file.writelines("rmdir \""+rel_dir_path+"\"\n")
 
 if __name__ == "__main__":
     generate_precomplete(os.getcwd())

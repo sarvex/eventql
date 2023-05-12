@@ -28,14 +28,13 @@ def readRegistryRecord(registry):
         if line == "%%":
             yield record
             record = {}
+        elif ":" in line:
+            key, value = line.split(":", 1)
+            key, value = key.strip(), value.strip()
+            record[key] = value
         else:
-            if ":" in line:
-                key, value = line.split(":", 1)
-                key, value = key.strip(), value.strip()
-                record[key] = value
-            else:
                 # continuation line
-                record[key] += " " + line
+            record[key] += f" {line}"
     if record:
         yield record
     return
@@ -119,10 +118,10 @@ def readRegistry(registry):
     # each other.
     for lang in languageSubtags:
         if lang in extlangMappings and extlangMappings[lang]["preferred"] != lang:
-            raise Exception("Conflict: lang with extlang mapping: " + lang)
+            raise Exception(f"Conflict: lang with extlang mapping: {lang}")
     for extlang in extlangSubtags:
         if extlang in langSubtagMappings:
-            raise Exception("Conflict: extlang with lang mapping: " + extlang)
+            raise Exception(f"Conflict: extlang with lang mapping: {extlang}")
 
     # Special case for heploc.
     langTagMappings["ja-latn-hepburn-heploc"] = "ja-Latn-alalc97"
